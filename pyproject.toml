@@ -1,0 +1,104 @@
+[build-system]
+requires = ["hatchling>=1.26.1"]
+build-backend = "hatchling.build"
+
+[project]
+name = "micronsclient"
+version = "0.0.1"
+description = "Client for microns dataset"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "caveclient>=7.7.4",
+    "numpy>=2.0.2",
+    "pandas>=2.2.3",
+    "standard-transform>=1.4.0",
+    "trimesh>=4.6.8",
+]
+authors = [
+    { name = "Casey Schneider-Mizell", email = "caseysm@gmail.com" },
+]
+
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+]
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "pytest-cov",
+    "ipykernel",
+    "bump-my-version",
+ ]
+docs = [
+    "mkdocs",
+    "mkdocs-material",
+    "mkdocstrings[python]",
+]
+lint = [
+    "ruff"
+]
+profile = [
+    "scalene",
+    "pyinstrument",
+]
+
+[tool.uv]
+default-groups = ["dev", "docs", "lint", "profile"]
+
+[tool.bumpversion]
+current_version = "0.0.1"
+parse = "(?P<major>\\d+)\\.(?P<minor>\\d+)\\.(?P<patch>\\d+)"
+serialize = ["{major}.{minor}.{patch}"]
+regex = false
+ignore_missing_version = false
+tag = true
+sign_tags = false
+tag_name = "v{new_version}"
+tag_message = "Bump version: {current_version} → {new_version}"
+allow_dirty = false
+commit = true
+message = "v{new_version}"
+commit_args = ""
+pre_commit_hooks = ['uv sync', 'git add uv.lock']
+post_commit_hooks = ["./.bmv-post-commit.sh"]
+
+[[tool.bumpversion.files]]
+filename = "src/micronsclient/__init__.py"
+search = "__version__ = \"{current_version}\""
+replace = "__version__ = \"{new_version}\""
+
+[[tool.bumpversion.files]]
+filename = "pyproject.toml"
+search = "version = \"{current_version}\""
+replace = "version = \"{new_version}\""
+
+[tool.ruff]
+extend-exclude = ["*.ipynb"]
+
+[tool.ruff.lint]
+select=["E9","F63","F7","F82"]
+
+[tool.poe.tasks.drybump]
+cmd = "uv run bump-my-version bump --dry-run --verbose"
+help = "Dry run of version bump for the project. Use with 'patch', 'minor', or 'major' to specify the version change."
+
+[tool.poe.tasks.bump]
+cmd = "uv run bump-my-version bump"
+help = "Bump the version number in the project. Use with 'patch', 'minor', or 'major' to specify the version change."
+
+[tool.poe.tasks.test]
+cmd = "uv run pytest --cov=micronsclient tests"
+help = "Run pytest with code coverage."
+
+[tool.poe.tasks.doc-preview]
+cmd = "uv run mkdocs serve"
+help = "Preview documentation build locally"
+
+[tool.poe.tasks.profile-all]
+cmd = "uv run scalene"
+help = "Profile cpu and memory of task with scalene"
+
+[tool.poe.tasks.profile]
+cmd = "uv run pyinstrument -r html"
+help = "Profile cpu of task with pyinstrument"
