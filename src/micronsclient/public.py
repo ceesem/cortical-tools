@@ -20,8 +20,8 @@ class MinniePublicClient(MicronsClient):
     def __repr__(self):
         return f"MinniePublicClient(datastack_name={self.datastack_name}, version={self.cave.materialize.version})"
 
-    def __repr_mimebundle__(self, include=None, exclude=None):
-        """Somehow necessary for IPython to detect _repr_html_ for subclasses."""
+    def _repr_mimebundle_(self, include=None, exclude=None):
+        """Necessary for IPython to detect _repr_html_ for subclasses."""
         return {"text/html": self.__repr_html__()}, {}
 
 
