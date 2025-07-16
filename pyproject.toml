@@ -7,9 +7,11 @@ name = "micronsclient"
 version = "0.0.1"
 description = "Client for microns dataset"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 dependencies = [
     "caveclient>=7.7.4",
+    "cloud-volume>=12.3.1",
+    "nglui>=4.4.2",
     "numpy>=2.0.2",
     "pandas>=2.2.3",
     "standard-transform>=1.4.0",

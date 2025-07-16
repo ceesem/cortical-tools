@@ -1,8 +1,8 @@
 from .common import MicronsClient
 
 
-class MicronsPublicClient(MicronsClient):
-    datastack_name = "minnie65_phase3_v1"
+class MinniePublicClient(MicronsClient):
+    datastack_name = "minnie65_public"
     server_address = "https://global.daf-apis.com"
     _cell_id_lookup_view = "nucleus_detection_lookup_v1"
     _root_id_lookup_main_table = "nucleus_detection_v0"
@@ -18,11 +18,11 @@ class MicronsPublicClient(MicronsClient):
         )
 
     def __repr__(self):
-        return f"MicronsPublicClient(datastack_name={self.datastack_name}, version={self.cave.materialize.version})"
+        return f"MinniePublicClient(datastack_name={self.datastack_name}, version={self.cave.materialize.version})"
 
     def __repr_mimebundle__(self, include=None, exclude=None):
         """Somehow necessary for IPython to detect _repr_html_ for subclasses."""
         return {"text/html": self.__repr_html__()}, {}
 
 
-client = MicronsPublicClient()
+client = MinniePublicClient()
