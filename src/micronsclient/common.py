@@ -313,6 +313,13 @@ class MicronsClient:
         return self._mesh_client
 
     @property
+    def space(self) -> standard_transform.datasets.Dataset:
+        """
+        Get the dataset transform for this MicronsClient.
+        """
+        return self._dataset_transform
+
+    @property
     def version(self) -> int:
         """
         Get the materialization version of the CAVEclient.
