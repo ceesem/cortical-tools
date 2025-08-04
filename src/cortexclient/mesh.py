@@ -1,6 +1,11 @@
 from numbers import Integral
+from typing import TYPE_CHECKING, Optional
+
+if TYPE_CHECKING:
+    from caveclient import CAVEclientFull
 
 import numpy as np
+from cloudvolume import CloudVolume
 from trimesh import Trimesh
 
 
@@ -21,10 +26,12 @@ def _convert_to_trimesh(mesh):
 class MeshClient:
     def __init__(
         self,
-        caveclient=None,
+        caveclient: Optional[CAVEclientFull] = None,
+        cv_path: Optional[str] = None,
     ):
         self._cv = None
         self._cc = caveclient
+        self._cv_path = cv_path
 
     @property
     def cv(self):
@@ -33,12 +40,15 @@ class MeshClient:
         return self._cv
 
     def _build_cv(self):
-        self._cv = self._cc.info.segmentation_cloudvolume()
+        if self._cv_path is None:
+            self._cv = self._cc.info.segmentation_cloudvolume()
+        else:
+            self._cv = CloudVolume(self._cv_path, progress=False, use_https=True)
 
     def _get_meshes(self, root_ids, progress):
         curr_prog = self.cv.progress is True
         self._cv.progress = progress
-        meshes = self.cv.mesh.get(root_ids, allow_missing=False)
+        meshes = self.cv.mesh.get(root_ids, fuse=False)
         self._cv.progress = curr_prog
         return meshes
 
@@ -68,7 +78,7 @@ class MeshClient:
         if not isinstance(root_id, Integral):
             raise ValueError("This function takes only one root id")
 
-        mesh = self._get_meshes(root_id, progress)[root_id]
+        mesh = self._get_meshes(root_id, progress).get(root_id)
         if as_trimesh:
             return _convert_to_trimesh(mesh)
         else:

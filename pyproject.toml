@@ -3,9 +3,9 @@ requires = ["hatchling>=1.26.1"]
 build-backend = "hatchling.build"
 
 [project]
-name = "micronsclient"
+name = "cortexclient"
 version = "0.0.1"
-description = "Client for microns dataset"
+description = "Client for cortical CAVE datasets"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
@@ -14,7 +14,8 @@ dependencies = [
     "nglui>=4.4.2",
     "numpy>=2.0.2",
     "pandas>=2.2.3",
-    "standard-transform>=1.4.0",
+    "pcg-skel>=1.3.1",
+    "standard-transform>=1.4.1",
     "trimesh>=4.6.8",
 ]
 authors = [
