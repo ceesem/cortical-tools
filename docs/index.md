@@ -30,3 +30,6 @@ from cortexclient.public import MinniePublicClient
 client = MinniePublicClient()
 client
 ```
+
+This will return a `MinniePublicClient` object that is ready to use. For example, `client.neuroglancer_url()` will return a URL that opens the Neuroglancer viewer at the specified location.
+Your standard `CAVEclient` functionality is available under `client.cave`.

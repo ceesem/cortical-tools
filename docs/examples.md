@@ -108,7 +108,7 @@ mesh = client.mesh.get_mesh(864691134885645050)
 
 will return a `cloudvolume.Mesh` object defined by properties `vertices` and `faces`. A similar `get_meshes` function will return a dictionary of meshes keyed by their root ids.
 
-## Get a skeleton (Meshwork)
+## Get a skeleton
 
 The new skeleton service helps return skeletons, and `pcg_skel` has additional functions to add synapses and vertex ids that help you map additional properties.
 This functionality is baked into the `cortexclient` like so:
@@ -123,7 +123,7 @@ This returns a Meshparty "meshwork" object with `skel.skeleton` as a skeleton, a
 In addition, you can apply the same spatial transformations you do to points to the skeletons and annotations returned.
 The parameter `transform` can take one of two values: `rigid` or `streamline`. If you choose `rigid`, the skeleton and annotation points are rotated and translated so that the pial surface is at y=0 and "down" is toward white matter. If you choose `streamline`, the points are deformed along the principal curvature of neurons that project across layers. This will have the effect of making a "direct" translaminar projection such as the axon of a layer 2/3 cell or the apical dendrite of a layer 6 cell will appear more vertical.
 
-## Export helpers
+## Helpers to download bulk exports 
 
 To help with bulk analysis and data archiving, many tables are exported as files to a cloud storage bucket.
 If you have access to one of these buckets (ask your system administrator!), the `exports` module helps find and retrieve these files.
@@ -145,3 +145,4 @@ If you want to know what versions are available for a given table, you can use t
 
 ```python
 versions = client.exports.available_versions('connections_with_nuclei')
+```

@@ -177,6 +177,8 @@ class VertexAssigner:
         caveclient: Optional["CAVEclientFull"] = None,
         vertices: Optional[npt.NDArray] = None,
         faces: Optional[npt.NDArray] = None,
+        lvl2_ids: Optional[npt.NDArray] = None,
+        lvl2_pts: Optional[npt.NDArray] = None,
         lru_cache: Optional[int] = 10 * 1024,
     ):
         self.caveclient = caveclient
@@ -195,6 +197,8 @@ class VertexAssigner:
         self._chunk_df_solo = None
         self._chunk_df_multi = None
         self._mesh_label = None
+        self._lvl2_ids = lvl2_ids
+        self._lvl2_pts = lvl2_pts
         self._setup_root_id()
 
     def _setup_root_id(self) -> Self:
@@ -203,7 +207,7 @@ class VertexAssigner:
             self._vertices, self._faces = self.get_mesh_data(self._root_id)
         self._timestamp = self.root_id_timestamp(self._root_id)
         self._chunk_df_solo, self._chunk_df_multi = self.get_chunk_dataframes(
-            self._root_id
+            self._root_id, self._lvl2_ids, self._lvl2_pts
         )
         return self
 
@@ -712,14 +716,16 @@ class VertexAssigner:
             id_mapping.append(
                 {
                     "l2id_idx": int(chunk_rows.index[row["representative_pt"]]),
-                    "vertex_mask": component_mask_dict[row["graph_comp"]],
+                    "vertex_mask": np.flatnonzero(
+                        component_mask_dict[row["graph_comp"]]
+                    ),
                 }
             )
         if np.any(unassigned_mask):
             id_mapping.append(
                 {
                     "l2id_idx": -1,
-                    "vertex_mask": unassigned_mask,
+                    "vertex_mask": np.flatnonzero(unassigned_mask),
                 }
             )
         return id_mapping
@@ -746,6 +752,8 @@ class VertexAssigner:
     def get_chunk_dataframes(
         self,
         caveclient: Optional["CAVEclientFull"] = None,
+        lvl2_ids: Optional[npt.NDArray] = None,
+        lvl2_pts: Optional[npt.NDArray] = None,
     ) -> pd.DataFrame:
         """Get chunk dataframe for a neuron
 
@@ -768,7 +776,11 @@ class VertexAssigner:
 
         if caveclient is None:
             caveclient = self.caveclient
-        l2ids, rep_points = self.get_l2_components(self._root_id)
+        if lvl2_ids is None or lvl2_pts is None:
+            l2ids, rep_points = self.get_l2_components(self._root_id)
+        else:
+            l2ids = lvl2_ids
+            rep_points = lvl2_pts
         df = self.chunk_dataframe(l2ids, rep_points)
         df_solo = df.drop_duplicates("chunk_number", keep=False)
         df_multi = df[df.duplicated("chunk_number", keep=False)]
@@ -783,11 +795,15 @@ class VertexAssigner:
             )
 
         id_mapping = []
-        for idx, row in self._chunk_df_solo.iterrows():
+        vertex_lists = Parallel(n_jobs=-1)(
+            delayed(bbox_mask)(row, self._vertices)
+            for _, row in self._chunk_df_solo.iterrows()
+        )
+        for idx, vert_mask in zip(self._chunk_df_solo.index, vertex_lists):
             id_mapping.append(
                 {
                     "l2id_idx": int(idx),
-                    "vertex_mask": bbox_mask(row, self._vertices),
+                    "vertex_mask": np.flatnonzero(vert_mask),
                 }
             )
         return id_mapping
@@ -817,7 +833,7 @@ class VertexAssigner:
         ratio_better: float = 0.33,
         coarse: bool = False,
         n_jobs: int = -1,
-        verbocity: int = 10,
+        verbocity: int = 1,
     ) -> list:
         if self._root_id is None:
             raise ValueError(

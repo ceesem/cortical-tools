@@ -11,6 +11,27 @@ The public, user-facing class is `cortexclient.public.MinniePublicClient`. Base 
                 show_source: false
                 heading_level: 2
 
+::: cortexclient.datasets.microns_prod
+        options:
+                members:
+                    - MicronsProdClient
+                show_source: false
+                heading_level: 2
+
+::: cortexclient.datasets.v1dd_public
+        options:
+                members:
+                    - V1ddPublicClient
+                show_source: false
+                heading_level: 2
+
+::: cortexclient.datasets.v1dd
+        options:
+                members:
+                    - V1ddClient
+                show_source: false
+                heading_level: 2
+
 ::: cortexclient.common
         options:
                 members:
