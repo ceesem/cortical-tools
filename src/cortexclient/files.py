@@ -1,5 +1,4 @@
 import contextlib
-import logging
 import os
 import re
 import sys
@@ -65,6 +64,15 @@ class CloudFileViewExport:
 
 
 class TableExportClient:
+    """Client for accessing CAVE table exports at a specific cloud path.
+    Talk to your dataset admin for the cloud path and to discuss what tables are made available with this route.
+
+    Parameters
+    ----------
+    cloudpath : str
+        The cloud path to the table exports.
+    """
+
     def __init__(
         self,
         cloudpath: str,
@@ -80,6 +88,7 @@ class TableExportClient:
 
     @property
     def available_files(self):
+        """List available files at the cloudpath."""
         if self._available_files is None:
             self._available_files = []
             view_files = list(self._cf)
@@ -116,7 +125,7 @@ class TableExportClient:
         )
 
     def get_table(self, table_name: str, version: int) -> pd.DataFrame:
-        """Get a specific table as a DataFrame."""
+        """Download a specific table as a DataFrame."""
         if table_name not in self.available_tables:
             raise ValueError(f"Table {table_name} is not available.")
         if version not in self.available_versions(table_name):

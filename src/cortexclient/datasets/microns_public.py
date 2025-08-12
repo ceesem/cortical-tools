@@ -1,12 +1,12 @@
-from standard_transform.datasets import v1dd_ds
+from standard_transform.datasets import minnie_ds
 
-from .common import DatasetClient
+from ..common import DatasetClient
 
 
-class V1ddClient(DatasetClient):
-    datastack_name = "v1dd"
-    server_address = "https://global.em.brain.allentech.org"
-    _cell_id_lookup_view = "nucleus_alternative_lookup"
+class MinniePublicClient(DatasetClient):
+    datastack_name = "minnie65_public"
+    server_address = "https://global.daf-apis.com"
+    _cell_id_lookup_view = "nucleus_detection_lookup_v1"
     _root_id_lookup_main_table = "nucleus_detection_v0"
     _root_id_lookup_alt_tables = ["nucleus_alternative_points"]
 
@@ -17,15 +17,15 @@ class V1ddClient(DatasetClient):
             cell_id_lookup_view=self._cell_id_lookup_view,
             root_id_lookup_main_table=self._root_id_lookup_main_table,
             root_id_lookup_alt_tables=self._root_id_lookup_alt_tables,
-            dataset_transform=v1dd_ds,
+            dataset_transform=minnie_ds,
         )
 
     def __repr__(self):
-        return f"V1ddClient(datastack_name={self.datastack_name}, version={self.cave.materialize.version})"
+        return f"MinniePublicClient(datastack_name={self.datastack_name}, version={self.cave.materialize.version})"
 
     def _repr_mimebundle_(self, include=None, exclude=None):
         """Necessary for IPython to detect _repr_html_ for subclasses."""
         return {"text/html": self.__repr_html__()}, {}
 
 
-client = V1ddClient()
+client = MinniePublicClient()

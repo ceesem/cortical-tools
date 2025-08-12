@@ -5,6 +5,7 @@ if TYPE_CHECKING:
     from meshparty.meshwork import Meshwork
 
 import numpy as np
+import numpy.typing as npt
 import pandas as pd
 import pcg_skel
 import standard_transform
@@ -39,7 +40,7 @@ def cell_id_to_root_id_factory(
         timestamp: Optional[datetime.datetime] = None,
         materialization_version: Optional[int] = None,
         filter_empty: bool = True,
-    ) -> np.ndarray:
+    ) -> npt.NDArray:
         """
         Convert cell IDs to root IDs using the CAVEclient.
 
@@ -124,9 +125,7 @@ def _selective_lookup(
                 pt_ref_root_id=query_idx.values,
             ).live_query(timestamp=timestamp, split_positions=True)
             if len(lookup_df_alt) > 0:
-                lookup_df_alts.append(
-                    lookup_df_alt[["id", "pt_root_id"]].set_index("pt_root_id")
-                )
+                lookup_df_alts.append(lookup_df_alt[["id", "pt_root_id"]])
         if len(lookup_df_alts) > 0:
             lookup_df_alt_concat = pd.concat(lookup_df_alts)[
                 ["id", "pt_root_id"]
@@ -285,42 +284,42 @@ class DatasetClient:
     @property
     def cave(self) -> CAVEclientFull:
         """
-        Get the CAVEclient instance for this MicronsClient.
+        Get the CAVEclient instance for this CortexClient.
         """
         return self._client
 
     @property
     def datastack_name(self) -> str:
         """
-        Get the name of the datastack associated with this MicronsClient.
+        Get the name of the datastack associated with this CortexClient.
         """
         return self._datastack_name
 
     @property
     def server_address(self) -> str:
         """
-        Get the server address associated with this MicronsClient.
+        Get the server address associated with this CortexClient.
         """
         return self._server_address
 
     @property
     def dataset_transform(self) -> standard_transform.datasets.Dataset:
         """
-        Get the dataset transform associated with this MicronsClient.
+        Get the dataset transform associated with this CortexClient.
         """
         return self._dataset_transform
 
     @property
     def mesh(self) -> MeshClient:
         """
-        Get the MeshClient instance for this MicronsClient.
+        Get the MeshClient instance for this CortexClient.
         """
         return self._mesh_client
 
     @property
     def space(self) -> standard_transform.datasets.Dataset:
         """
-        Get the dataset transform for this MicronsClient.
+        Get the dataset transform for this CortexClient.
         """
         return self._dataset_transform
 
@@ -337,6 +336,9 @@ class DatasetClient:
         Set the materialization version of the CAVEclient.
         """
         self.cave.materialize.version = value
+
+    def get_l2_ids(self, root_id: int) -> list[int]:
+        return self.cave.chunkedgraph.get_roots(root_id, stop_layer=2)
 
     def get_skeleton(
         self,
@@ -405,6 +407,27 @@ class DatasetClient:
         if version is None:
             version = self.cave.materialize.version
         return self.cave.materialize.get_version_timestamp(version)
+
+    def latest_valid_timestamp(
+        self,
+        root_ids: list[int],
+    ) -> npt.NDArray:
+        """
+        Get the latest valid timestamps for a list of root IDs.
+        If the root ID is out of date, it will return the last timestamp at which it was valid and could be used in queries.
+        If the root ID is up to date, it will return the current timestamp at the request time, which is still ensured to be valid.
+
+        Parameters
+        ----------
+        root_ids : list[int]
+            The list of root IDs to get the latest valid timestamps for.
+
+        Returns
+        -------
+        npt.NDArray
+            The latest valid timestamps for the specified root IDs.
+        """
+        return self.cave.chunkedgraph.get_root_timestamps(root_ids, latest=True)
 
     def neuroglancer_url(
         self,

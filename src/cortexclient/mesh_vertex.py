@@ -3,10 +3,10 @@ from copy import copy
 from itertools import combinations
 from typing import TYPE_CHECKING, Optional, Self
 
-import cloudvolume
 import fastremap
 import gpytoolbox as gyp
 import numpy as np
+import numpy.typing as npt
 import pandas as pd
 from joblib import Parallel, delayed
 from scipy import sparse, spatial
@@ -25,7 +25,7 @@ if TYPE_CHECKING:
 def get_lvl2_points(
     l2ids,
     caveclient,
-) -> tuple[np.ndarray, np.ndarray]:
+) -> npt.NDArray:
     data = caveclient.l2cache.get_l2data(l2ids, attributes=["rep_coord_nm"])
     df = pd.DataFrame(
         {
@@ -50,12 +50,12 @@ def bbox_mask(
     ----------
     row : pd.Series
         A row from chunk_df_solo containing bounding box coordinates
-    vertices : np.ndarray
+    vertices : npt.NDArray
         Array of vertex positions
 
     Returns
     -------
-    np.ndarray
+    npt.NDArray
         Boolean mask indicating which vertices are within the bounding box
     """
     if inclusive:
@@ -111,16 +111,12 @@ def component_submesh(
     component_mask = mask_in.copy()
     component_mask[mask_in] = within_component_mask
 
-    face_mask_inclusive = mask_all[faces]
     # I want faces that have all values in the boundary inclusive mask and any values in the component mask.
 
-    face_in_chunk = np.all(face_mask_inclusive, axis=1)
     face_touch_component = np.any(component_mask[faces], axis=1)
 
-    component_faces = faces[face_in_chunk & face_touch_component]
-    component_vertex_indices = np.unique(
-        np.concatenate((component_faces.ravel(), np.flatnonzero(component_mask)))
-    )
+    component_faces = faces[face_touch_component]
+    component_vertex_indices = np.unique(component_faces.ravel())
     vertex_mask = np.zeros(vertices.shape[0], dtype=bool)
     vertex_mask[component_vertex_indices] = True
     relabel = {v: k for k, v in enumerate(np.flatnonzero(vertex_mask))}
@@ -179,6 +175,8 @@ class VertexAssigner:
         self,
         root_id: int,
         caveclient: Optional["CAVEclientFull"] = None,
+        vertices: Optional[npt.NDArray] = None,
+        faces: Optional[npt.NDArray] = None,
         lru_cache: Optional[int] = 10 * 1024,
     ):
         self.caveclient = caveclient
@@ -187,8 +185,12 @@ class VertexAssigner:
             self.cv.image.lru.resize(lru_cache)
 
         self._root_id = root_id
-        self._vertices = None
-        self._faces = None
+        if vertices is not None and faces is not None:
+            self._vertices = vertices
+            self._faces = faces
+        else:
+            self._vertices = None
+            self._faces = None
         self._timestamp = None
         self._chunk_df_solo = None
         self._chunk_df_multi = None
@@ -197,7 +199,8 @@ class VertexAssigner:
 
     def _setup_root_id(self) -> Self:
         """Set the root ID for the mesh"""
-        self._vertices, self._faces = self.get_mesh_data(self._root_id)
+        if self._vertices is None or self._faces is None:
+            self._vertices, self._faces = self.get_mesh_data(self._root_id)
         self._timestamp = self.root_id_timestamp(self._root_id)
         self._chunk_df_solo, self._chunk_df_multi = self.get_chunk_dataframes(
             self._root_id
@@ -212,14 +215,14 @@ class VertexAssigner:
         return self._root_id
 
     @property
-    def vertices(self) -> np.ndarray:
+    def vertices(self) -> npt.NDArray:
         """Get the vertices of the mesh"""
         if self._vertices is None:
             raise ValueError("Vertices must be set before accessing them.")
         return self._vertices
 
     @property
-    def faces(self) -> np.ndarray:
+    def faces(self) -> npt.NDArray:
         """Get the faces of the mesh"""
         if self._faces is None:
             raise ValueError("Faces must be set before accessing them.")
@@ -254,11 +257,11 @@ class VertexAssigner:
         return pd.concat([self._chunk_df_solo, self._chunk_df_multi]).sort_index()
 
     @property
-    def lvl2_ids(self) -> np.ndarray:
+    def lvl2_ids(self) -> npt.NDArray:
         return self.chunk_df["l2id"].values
 
     @property
-    def mesh_label(self) -> np.ndarray:
+    def mesh_label(self) -> npt.NDArray:
         """Get the mesh label for the vertices"""
         if self._mesh_label is None:
             raise ValueError(
@@ -266,7 +269,7 @@ class VertexAssigner:
             )
         return self._mesh_label
 
-    def chunk_to_nm(self, xyz_ch: np.ndarray) -> np.ndarray:
+    def chunk_to_nm(self, xyz_ch: npt.NDArray) -> npt.NDArray:
         """Map a chunk location to Euclidean space
 
         Parameters
@@ -282,7 +285,7 @@ class VertexAssigner:
         return chunk_to_nm(xyz_ch, self.cv)
 
     @property
-    def chunk_dims(self) -> np.ndarray:
+    def chunk_dims(self) -> npt.NDArray:
         """Gets the size of a chunk in euclidean space
 
         Parameters
@@ -305,8 +308,8 @@ class VertexAssigner:
 
     def adjust_for_draco(
         self,
-        vals: np.ndarray,
-    ) -> np.ndarray:
+        vals: npt.NDArray,
+    ) -> npt.NDArray:
         "Adjust grid locations to align with the discrete draco grid"
         return self.draco_size * np.floor(vals / self.draco_size)
 
@@ -341,7 +344,7 @@ class VertexAssigner:
         )
         return df
 
-    def chunk_dataframe(self, l2ids: np.ndarray, points: np.ndarray) -> pd.DataFrame:
+    def chunk_dataframe(self, l2ids: npt.NDArray, points: npt.NDArray) -> pd.DataFrame:
         """Create a dataframe of chunk bounding boxes for a neuron
 
         Parameters
@@ -379,9 +382,10 @@ class VertexAssigner:
         vertices,
         faces,
         ts,
-        cloudvolume_fallback: bool = True,
+        cloudvolume_fallback: bool = False,
         max_distance: float = 500,
         ratio_better: float = 0.33,
+        coarse: bool = False,
     ):
         """Assign representative points to components in a chunk mesh.
 
@@ -428,29 +432,32 @@ class VertexAssigner:
                 "graph_comp": mesh_assign.astype(int),
             }
         )
+        if len(result_df) == 0 and coarse:
+            return None, None, None
 
-        for comp in components:
-            # If you have not already assigned a point to this component, use the slower cloudvolume lookup
+        if not coarse:
+            for comp in components:
+                # If you have not already assigned a point to this component, use the slower cloudvolume lookup
 
-            if comp["component_id"] not in result_df["graph_comp"].values:
-                self.representative_point_via_proximity(
-                    components=components,
-                    result_df=result_df,
-                    max_distance=max_distance,
-                    ratio_better=ratio_better,
-                )
-                if len(result_df) < len(components) and cloudvolume_fallback:
-                    point_to_component = self.representative_point_via_lookup(
-                        chunk_rows=chunk_rows,
-                        comp=comp,
-                        timestamp=ts,
+                if comp["component_id"] not in result_df["graph_comp"].values:
+                    self.representative_point_via_proximity(
+                        components=components,
+                        result_df=result_df,
+                        max_distance=max_distance,
+                        ratio_better=ratio_better,
                     )
-                    if point_to_component == -1:
-                        continue
-                    result_df.loc[result_df.index[-1] + 1] = {
-                        "representative_pt": point_to_component,
-                        "graph_comp": comp["component_id"],
-                    }
+                    if len(result_df) < len(components) and cloudvolume_fallback:
+                        point_to_component = self.representative_point_via_lookup(
+                            chunk_rows=chunk_rows,
+                            comp=comp,
+                            timestamp=ts,
+                        )
+                        if point_to_component == -1:
+                            continue
+                        result_df.loc[result_df.index[-1] + 1] = {
+                            "representative_pt": point_to_component,
+                            "graph_comp": comp["component_id"],
+                        }
 
         comp_mask_dict = {}
         for comp in components:
@@ -511,7 +518,9 @@ class VertexAssigner:
                 "distance": ds,
             }
         )
-        distance_graph = distance_graph[distance_graph["distance"] < max_distance]
+        distance_graph = distance_graph[
+            distance_graph["distance"] < max_distance
+        ].reset_index()
         distance_graph["evaluated"] = False
 
         # Ignore distances that are too large (and note that we set evaluated pairs to infinity)
@@ -558,37 +567,6 @@ class VertexAssigner:
                         "second_assigned",
                     ] = True
 
-        # assigned_components = result_df["graph_comp"].unique()
-        # if len(assigned_components) == 0:
-        #     return False
-        # vert_assigned = {
-        #     comp["component_id"]: comp["vertices_in"]
-        #     for comp in components
-        #     if comp["component_id"] in assigned_components
-        # }
-        # unassigned_components = [
-        #     comp
-        #     for comp in components
-        #     if comp["component_id"] not in assigned_components
-        # ]
-        # components_to_assign = {}
-        # for comp in unassigned_components:
-        #     best_comp = self.find_closest_assigned_component(
-        #         comp,
-        #         vert_assigned,
-        #         max_distance=max_distance,
-        #         ratio_better=ratio_better,
-        #     )
-        #     if best_comp != -1:
-        #         best_pt = result_df.query("graph_comp == @best_comp")[
-        #             "representative_pt"
-        #         ].values
-        #         components_to_assign[comp["component_id"]] = int(best_pt)
-        # for c_id, best_pt in components_to_assign.items():
-        #     result_df.loc[result_df.index[-1] + 1] = {
-        #         "representative_pt": best_pt,
-        #         "graph_comp": c_id,
-        #     }
         return result_df
 
     def find_closest_assigned_component(
@@ -619,7 +597,7 @@ class VertexAssigner:
         comp: dict,
         timestamp: datetime.datetime,
         point_counts: Optional[list[int]] = None,
-        potential_l2ids: np.ndarray = None,
+        potential_l2ids: npt.NDArray = None,
     ):
         comp_bbox = np.vstack(
             [
@@ -684,32 +662,33 @@ class VertexAssigner:
     def process_multicomponent_chunk(
         self,
         chunk_rows: pd.DataFrame,
-        vertices: np.ndarray,
-        faces: np.ndarray,
+        vertices: npt.NDArray,
+        faces: npt.NDArray,
         ts: datetime.datetime,
-        cloudvolume_fallback: bool = True,
+        cloudvolume_fallback: bool = False,
         max_distance: float = 500,
         ratio_better: float = 0.33,
+        coarse: bool = False,
     ) -> list:
         """Process a single mesh chunk
 
-        Parameters
-        ----------
-        chunk_rows : pd.DataFrame
-            DataFrame containing chunk bounding box information and vertex positions
-        vertices : np.ndarray
-            Array of vertex positions for the complete mesh
-        faces : np.ndarray
-            Array of face indices for the complete mesh
-        ts: datetime.datetime
-            Timestamp for the root id
+            Parameters
+            ----------
+            chunk_rows : pd.DataFrame
+                DataFrame containing chunk bounding box information and vertex positions
+        vertices : npt.NDArray
+                Array of vertex positions for the complete mesh
+        faces : npt.NDArray
+                Array of face indices for the complete mesh
+            ts: datetime.datetime
+                Timestamp for the root id
 
-        Returns
-        -------
-        tuple
-            A tuple containing two arrays, both with one entry for every vertex contained in the chunk bounding box:
-            - `mind`: Indices of mesh vertices in the chunk
-            - `l2id_index`: Indices of the representative points in the chunk as defined by the chunk_rows DataFrame
+            Returns
+            -------
+            tuple
+                A tuple containing two arrays, both with one entry for every vertex contained in the chunk bounding box:
+                - `mind`: Indices of mesh vertices in the chunk
+                - `l2id_index`: Indices of the representative points in the chunk as defined by the chunk_rows DataFrame
         """
 
         # To get the right mesh faces for association, we need to include the vertices on chunk bounds even if we don't plan to assign values to them
@@ -722,8 +701,12 @@ class VertexAssigner:
                 cloudvolume_fallback=cloudvolume_fallback,
                 max_distance=max_distance,
                 ratio_better=ratio_better,
+                coarse=coarse,
             )
         )
+        if assignment_df is None:
+            return []
+
         id_mapping = []
         for _, row in assignment_df.iterrows():
             id_mapping.append(
@@ -745,7 +728,7 @@ class VertexAssigner:
         self,
         root_id,
         caveclient=None,
-    ) -> tuple[np.ndarray, np.ndarray]:
+    ) -> tuple[npt.NDArray, npt.NDArray]:
         if caveclient is None:
             caveclient = self.caveclient
         l2ids = caveclient.chunkedgraph.get_leaves(root_id, stop_layer=2)
@@ -755,7 +738,7 @@ class VertexAssigner:
     def get_mesh_data(
         self,
         root_id,
-    ) -> tuple[np.ndarray, np.ndarray]:
+    ) -> tuple[npt.NDArray, npt.NDArray]:
         with suppress_output():
             mesh = self.cv.mesh.get(root_id, fuse=False).get(root_id)
         return mesh.vertices, mesh.faces
@@ -829,10 +812,12 @@ class VertexAssigner:
 
     def process_chunk_dataframe_multi(
         self,
-        cloudvolume_fallback: bool = True,
+        cloudvolume_fallback: bool = False,
         max_distance: float = 500,
         ratio_better: float = 0.33,
+        coarse: bool = False,
         n_jobs: int = -1,
+        verbocity: int = 10,
     ) -> list:
         if self._root_id is None:
             raise ValueError(
@@ -843,7 +828,9 @@ class VertexAssigner:
         ]
 
         # Parallelize over chunks (process-based)
-        id_mapping_results = Parallel(n_jobs=n_jobs, prefer="processes")(
+        id_mapping_results = Parallel(
+            n_jobs=n_jobs, prefer="processes", verbose=verbocity
+        )(
             delayed(self.process_multicomponent_chunk)(
                 chunk_rows,
                 self._vertices,
@@ -852,6 +839,7 @@ class VertexAssigner:
                 cloudvolume_fallback=cloudvolume_fallback,
                 max_distance=max_distance,
                 ratio_better=ratio_better,
+                coarse=coarse,
             )
             for chunk_rows in tqdm(
                 chunk_groups, desc="Processing chunks", disable=n_jobs == 1
@@ -892,17 +880,36 @@ class VertexAssigner:
         self,
         max_distance: float = 500,
         ratio_better: float = 0.33,
-        cloudvolume_fallback: bool = True,
-        hop_limit: int = 50,
+        cloudvolume_fallback: bool = False,
+        hop_limit: Optional[int] = None,
+        coarse: bool = False,
         n_jobs: int = -1,
+        verbocity: int = 10,
     ) -> np.ndarray:
+        """
+        Process the mesh.
+
+        Returns
+        -------
+        np.ndarray
+            Array of l2ids for each mesh label. Unassigned values have id 0.
+        """
+        if hop_limit is None:
+            if coarse:
+                hop_limit = 75
+            else:
+                hop_limit = 50
+
         id_mapping_solo = self.process_chunk_dataframe_solo()
         id_mapping_multi = self.process_chunk_dataframe_multi(
             cloudvolume_fallback=cloudvolume_fallback,
             max_distance=max_distance,
             ratio_better=ratio_better,
+            coarse=coarse,
             n_jobs=n_jobs,
+            verbocity=verbocity,
         )
+
         mesh_label = np.full(self.vertices.shape[0], -1, dtype=int)
         for row in id_mapping_solo:
             mesh_label[row["vertex_mask"]] = row["l2id_idx"]
@@ -911,7 +918,7 @@ class VertexAssigner:
         self._mesh_label = mesh_label
         if hop_limit > 0:
             self.propagate_labels(hop_limit=hop_limit)
-        return self.mesh_label
+        return self.lvl2_map()
 
     def lvl2_map(self) -> np.ndarray:
         lvl2_map = np.full(self.vertices.shape[0], 0, dtype=int)

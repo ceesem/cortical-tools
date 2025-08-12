@@ -71,7 +71,7 @@ pre_commit_hooks = ['uv sync', 'git add uv.lock']
 post_commit_hooks = ["./.bmv-post-commit.sh"]
 
 [[tool.bumpversion.files]]
-filename = "src/micronsclient/__init__.py"
+filename = "src/cortexclient/__init__.py"
 search = "__version__ = \"{current_version}\""
 replace = "__version__ = \"{new_version}\""
 
@@ -95,7 +95,7 @@ cmd = "uv run bump-my-version bump"
 help = "Bump the version number in the project. Use with 'patch', 'minor', or 'major' to specify the version change."
 
 [tool.poe.tasks.test]
-cmd = "uv run pytest --cov=micronsclient tests"
+cmd = "uv run pytest --cov=cortexclient tests"
 help = "Run pytest with code coverage."
 
 [tool.poe.tasks.doc-preview]

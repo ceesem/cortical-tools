@@ -1,1 +1,1 @@
-Welcome to MicronsClient!
+Welcome to CortexClient!

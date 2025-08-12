@@ -1,10 +1,10 @@
 from standard_transform.datasets import minnie_ds
 
-from .common import DatasetClient
+from ..common import DatasetClient
 
 
-class MinniePublicClient(DatasetClient):
-    datastack_name = "minnie65_public"
+class MicronsProdClient(DatasetClient):
+    datastack_name = "minnie65_phase3_v1"
     server_address = "https://global.daf-apis.com"
     _cell_id_lookup_view = "nucleus_detection_lookup_v1"
     _root_id_lookup_main_table = "nucleus_detection_v0"
@@ -21,11 +21,11 @@ class MinniePublicClient(DatasetClient):
         )
 
     def __repr__(self):
-        return f"MinniePublicClient(datastack_name={self.datastack_name}, version={self.cave.materialize.version})"
+        return f"MicronsPublicClient(datastack_name={self.datastack_name}, version={self.cave.materialize.version})"
 
     def _repr_mimebundle_(self, include=None, exclude=None):
         """Necessary for IPython to detect _repr_html_ for subclasses."""
         return {"text/html": self.__repr_html__()}, {}
 
 
-client = MinniePublicClient()
+client = MicronsProdClient()

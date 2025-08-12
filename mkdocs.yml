@@ -1,12 +1,13 @@
-site_name: MicronsClient Documentation
-site_url: https://ceesem.github.io/micronsclient/
-repo_url: https://github.com/ceesem/micronsclient
-repo_name: ceesem/micronsclient
+site_name: CortexClient Documentation
+site_url: https://ceesem.github.io/cortexclient/
+repo_url: https://github.com/ceesem/cortexclient
+repo_name: ceesem/cortexclient
 
 nav:
 - About: index.md
-- Function Reference:
-    - reference/api.md
+- Examples: examples.md
+- API Reference:
+  - reference/api.md
 - Changelog: changelog.md
 
   
@@ -53,7 +54,7 @@ plugins:
             - https://docs.python.org/3/objects.inv
             - https://numpy.org/doc/stable/objects.inv
             - https://pandas.pydata.org/pandas-docs/stable/objects.inv
-          paths: [.]
+          paths: [src]
           options:
             show_source: false
             docstring_style: numpy
