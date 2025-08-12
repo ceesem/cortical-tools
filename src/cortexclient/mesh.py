@@ -26,7 +26,7 @@ def _convert_to_trimesh(mesh):
 class MeshClient:
     def __init__(
         self,
-        caveclient: Optional[CAVEclientFull] = None,
+        caveclient: Optional["CAVEclientFull"] = None,
         cv_path: Optional[str] = None,
     ):
         self._cv = None

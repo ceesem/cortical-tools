@@ -9,6 +9,7 @@ import pandas as pd
 import pcg_skel
 import standard_transform
 from caveclient import CAVEclient
+from caveclient.frameworkclient import CAVEclientFull
 from nglui import statebuilder as sb
 
 from .files import TableExportClient
@@ -282,7 +283,7 @@ class DatasetClient:
         self.exports = TableExportClient(cloudpath)
 
     @property
-    def cave(self) -> CAVEclient:
+    def cave(self) -> CAVEclientFull:
         """
         Get the CAVEclient instance for this MicronsClient.
         """

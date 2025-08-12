@@ -11,6 +11,7 @@ requires-python = ">=3.10"
 dependencies = [
     "caveclient>=7.7.4",
     "cloud-volume>=12.3.1",
+    "gpytoolbox>=0.3.6",
     "nglui>=4.4.2",
     "numpy>=2.0.2",
     "pandas>=2.2.3",
@@ -32,6 +33,9 @@ dev = [
     "pytest-cov",
     "ipykernel",
     "bump-my-version",
+    "pyvista[all]",
+    "seaborn",
+    "jupyter-server-proxy"
  ]
 docs = [
     "mkdocs",
