@@ -20,16 +20,18 @@ client
 This client is *not* a CAVEclient, but rather a dataset-specific client that provides access to the dataset's resources and functionality.
 The typical CAVEclient is available under `client.cave`, and has all the usual CAVE functionality.
 
+See the [Dataset Clients](reference/api.md#dataset-clients) section for details on all available dataset clients.
+
 ## Neuroglancer links
 
-If you want to jump directly into the data, you can use the `client.neuroglancer_url()` method to get a URL that opens the Neuroglancer viewer at the specified location.
+If you want to jump directly into the data, you can use the [`neuroglancer_url()`](reference/api.md#datasetclient) method to get a URL that opens the Neuroglancer viewer at the specified location.
 This url is also integrated into the object representation in a jupyter notebook, where if you just return `client`, you can click on it to open a neuroglancer viewer.
 
 There are a few handy features inherited from `nglui`, including the ability to copy the URL to your clipboard with `client.neuroglancer_url(clipboard=True)`.
 
 ## Queries
 
-The `client.tables` and `client.views` give access to the dataset's tables and views via an autocomplete-compatible feature. This is a passthrough to the `caveclient.materialize.tables` and `caveclient.materialize.views` functionality.
+The [`tables`](reference/api.md#datasetclient) and [`views`](reference/api.md#datasetclient) properties give access to the dataset's tables and views via an autocomplete-compatible feature. This is a passthrough to the `caveclient.materialize.tables` and `caveclient.materialize.views` functionality.
 
 ```python
 client.tables
@@ -70,7 +72,7 @@ You could then use this to merge with other dataframes on the index.
 If a cell has no cell id, perhaps because it has no entry (or multiple entries) in the tables that define cell ids, it will have a value of -1.
 Note that one does not need to specify a timestamp at which a root id was valid, this will be looked up along the way.
 
-You can do the reverse, with **cell id to root id** lookup via:
+You can do the reverse, with **cell id to root id** lookup via the [`cell_id_to_root_id()`](reference/api.md#datasetclient) method:
 
 ```python
 cell_ids = [264898, 262893, 260746, 256505, 304873, 309263, 292878, 365890, 230644, 518853]
@@ -89,7 +91,7 @@ Different cortical datasets are oriented in different ways, but typically we wan
 Moreover, there can be a natural curvature to cells at different depths that we want to account for.
 The package [`standard_transform`](https://github.com/CAVEconnectome/standard_transform) provides spatial transforms tailored to these database that will help approximate these issues.
 
-The [appropriate set of transform functions](https://github.com/CAVEconnectome/standard_transform?tab=readme-ov-file#datasets) are mapped to `client.space`, for example `standard_transform.minnie65_ds` is mapped to `client.space` in the above examples.
+The [appropriate set of transform functions](https://github.com/CAVEconnectome/standard_transform?tab=readme-ov-file#datasets) are mapped to [`client.space`](reference/api.md#datasetclient), for example `standard_transform.minnie65_ds` is mapped to `client.space` in the above examples.
 
 Let's use this to find the soma depth for the proofread points.
 Because we used a desired resolution of `[1,1,1]`, spatial values came back in nanometers.
@@ -106,7 +108,9 @@ Meshes can be retrieved through `cloudvolume`, but there's no need to do that di
 mesh = client.mesh.get_mesh(864691134885645050)
 ```
 
-will return a `cloudvolume.Mesh` object defined by properties `vertices` and `faces`. A similar `get_meshes` function will return a dictionary of meshes keyed by their root ids.
+will return a `cloudvolume.Mesh` object defined by properties `vertices` and `faces`. A similar [`get_meshes()`](reference/api.md#meshclient) function will return a dictionary of meshes keyed by their root ids.
+
+See the [MeshClient](reference/api.md#meshclient) documentation for all available mesh operations.
 
 ## Get a skeleton
 
@@ -123,31 +127,35 @@ This returns a Meshparty "meshwork" object with `skel.skeleton` as a skeleton, a
 In addition, you can apply the same spatial transformations you do to points to the skeletons and annotations returned.
 The parameter `transform` can take one of two values: `rigid` or `streamline`. If you choose `rigid`, the skeleton and annotation points are rotated and translated so that the pial surface is at y=0 and "down" is toward white matter. If you choose `streamline`, the points are deformed along the principal curvature of neurons that project across layers. This will have the effect of making a "direct" translaminar projection such as the axon of a layer 2/3 cell or the apical dendrite of a layer 6 cell will appear more vertical.
 
-## Helpers to download bulk exports 
+See the [`get_skeleton()`](reference/api.md#datasetclient) method documentation for all available parameters.
+
+## Helpers to download bulk exports
 
 To help with bulk analysis and data archiving, many tables are exported as files to a cloud storage bucket.
-If you have access to one of these buckets (ask your system administrator!), the `exports` module helps find and retrieve these files.
+If you have access to one of these buckets (ask your system administrator!), the exports module helps find and retrieve these files.
 
 ```python
 # If you have a static export bucket
 client.set_export_cloudpath("gs://my-bucket/exports/") # Get this from someone in the know
 ```
 
-Now, to see what is available, you can use the `client.exports.available_data_df()` function to get a DataFrame of all available export files, what versions are present, and how big the files are.
+Now, to see what is available, you can use the [`available_data_df()`](reference/api.md#tableexportclient) function to get a DataFrame of all available export files, what versions are present, and how big the files are.
 
-Once you know the table name and the desired version, you can use the `client.exports.get_table()` function to retrieve the data as a DataFrame.
+Once you know the table name and the desired version, you can use the [`get_table()`](reference/api.md#tableexportclient) function to retrieve the data as a DataFrame.
 
 ```python
 df = client.exports.get_table('connections_with_nuclei', 1484)
 ```
 
-If you want to know what versions are available for a given table, you can use the `client.exports.available_versions()` function.
+If you want to know what versions are available for a given table, you can use the [`available_versions()`](reference/api.md#tableexportclient) function.
 
 ```python
 versions = client.exports.available_versions('connections_with_nuclei')
 ```
 
-## Helpers to assign level 2 ids to a mesh.
+See the [File Export Classes](reference/api.md#file-export-classes) documentation for more details.
+
+## Helpers to assign level 2 ids to a mesh
 
 ![Mesh vertices labeled by L2 id](img/l2labeled.png){ width="600", align=right }
 /// caption
@@ -158,7 +166,7 @@ It can be convenient to mask out parts of a mesh that you don't want to visualiz
 Skeleton vertices that are generated with `pcg_skel` have a unique "level 2 id" associated with each vertex, and nominally there is a mapping between these level 2 ids and mesh vertices.
 In practice, however, this mapping is lost in the creation of meshes.
 
-In order to recover this mapping, you can use the `compute_vertex_to_l2_mapping` function in the `MeshClient` class. This function takes the root ID of the mesh and returns an array of layer 2 IDs for each vertex.
+In order to recover this mapping, you can use the [`compute_vertex_to_l2_mapping()`](reference/api.md#meshclient) function in the `MeshClient` class. This function takes the root ID of the mesh and returns an array of layer 2 IDs for each vertex.
 
 ```python
 l2mapping = client.mesh.compute_vertex_to_l2_mapping(root_id)

@@ -25,10 +25,10 @@ theme:
   features:
     - navigation.indexes
     - navigation.instant
-    # - navigation.footer
+    - navigation.footer
     # - navigation.path
     - navigation.prune
-    # - navigation.sections # toggle to have sections in side nav
+    - navigation.sections # toggle to have sections in side nav
     - navigation.tabs # toggle to mainly use top nav
     - navigation.tabs.sticky
     - toc.follow
@@ -38,15 +38,20 @@ theme:
     - search.highlight
     - search.share
     - content.code.copy
-    - header.autohide
+    # - header.autohide
     
 markdown_extensions:
   - admonition
   - attr_list
   - md_in_html
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+  - pymdownx.keys
   - pymdownx.blocks.caption
 
 plugins:
+  - search
   - mkdocstrings:
       default_handler: python
       handlers:
@@ -82,3 +87,6 @@ plugins:
             unwrap_annotated: false # https://mkdocstrings.github.io/python/usage/configuration/signatures/#unwrap_annotated
             heading_level: 2
             inherited_members: true
+            filters:
+              - "!^_"  # Exclude private members
+              - "!^__"  # Exclude dunder methods
