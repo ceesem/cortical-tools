@@ -146,3 +146,38 @@ If you want to know what versions are available for a given table, you can use t
 ```python
 versions = client.exports.available_versions('connections_with_nuclei')
 ```
+
+## Helpers to assign level 2 ids to a mesh.
+
+![Mesh vertices labeled by L2 id](img/l2labeled.png){ width="600", align=right }
+/// caption
+Mesh vertices labeled by different Layer 2 Ids.
+///
+
+It can be convenient to mask out parts of a mesh that you don't want to visualize or analyze, but most ways of assigning labels relate to skeletons.
+Skeleton vertices that are generated with `pcg_skel` have a unique "level 2 id" associated with each vertex, and nominally there is a mapping between these level 2 ids and mesh vertices.
+In practice, however, this mapping is lost in the creation of meshes.
+
+In order to recover this mapping, you can use the `compute_vertex_to_l2_mapping` function in the `MeshClient` class. This function takes the root ID of the mesh and returns an array of layer 2 IDs for each vertex.
+
+```python
+l2mapping = client.mesh.compute_vertex_to_l2_mapping(root_id)
+```
+
+This will take anywhere from a minute to several minutes depending on the size of the mesh, including both mesh downloading and processing.
+If you want to cut down some of the time and you have a mesh already downloaded, you can pass the vertex and face arrays directly to the function:
+
+```python
+l2mapping = client.mesh.compute_vertex_to_l2_mapping(
+    root_id,
+    vertices=mesh.vertices,
+    faces=mesh.faces
+)
+```
+
+The resulting l2mapping will have the same length as `mesh.vertices` and a corresponding layer 2 ID for each vertex.
+Vertices that were unable to be assigned are given a value of `0`.
+
+Finished mappings are preserved in the MeshClient under `client.mesh.mesh_l2_mappings`, which is a dictionary from root ids to id maps.
+
+If you want more complete information about the process, including mesh vertices and faces, you can also set the parameter `return_assigner=True`, which will return both a mapping array and the VertexAssigner class, which contains among other things the vertices and faces of the mesh (`va.vertices` and `va.faces` respectively).

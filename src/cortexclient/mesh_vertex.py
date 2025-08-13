@@ -1,8 +1,14 @@
 import datetime
 import logging
+import warnings
 from copy import copy
 from itertools import combinations
 from typing import TYPE_CHECKING, Optional, Self
+
+warnings.filterwarnings(
+    "ignore", message=".*Using `tqdm.autonotebook.tqdm` in notebook mode.*"
+)
+
 
 import fastremap
 import gpytoolbox as gyp
@@ -24,6 +30,8 @@ if TYPE_CHECKING:
     import numpy.typing as npt
 
     from .common import CAVEclientFull
+
+__all__ = ["VertexAssigner"]
 
 
 def get_lvl2_points(
@@ -887,7 +895,7 @@ class VertexAssigner:
     def compute_mesh_label(
         self,
         max_distance: float = 500,
-        ratio_better: float = 0.33,
+        ratio_better: float = 0.5,
         cloudvolume_fallback: bool = False,
         hop_limit: Optional[int] = None,
         coarse: bool = False,
