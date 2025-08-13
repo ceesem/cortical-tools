@@ -337,7 +337,19 @@ class DatasetClient:
         """
         self.cave.materialize.version = value
 
-    def get_l2_ids(self, root_id: int) -> list[int]:
+    def get_l2_ids(self, root_id: int) -> np.ndarray:
+        """Get level 2 ids for a root id.
+
+        Parameters
+        ----------
+        root_id : int
+            Root ID for a neuron
+
+        Returns
+        -------
+        list[int]
+            List of level 2 IDs for the specified root ID.
+        """
         return self.cave.chunkedgraph.get_roots(root_id, stop_layer=2)
 
     def get_skeleton(
@@ -350,6 +362,31 @@ class DatasetClient:
         skeleton_version: Optional[int] = None,
         transform: Optional[Literal["rigid", "streamline"]] = None,
     ) -> "Meshwork":
+        """
+        Get the meshwork for a specific root ID.
+
+        Parameters
+        ----------
+        root_id : int
+            Root ID for a neuron
+        synapses : bool, optional
+            If True, include synapses in the meshwork, by default True
+        restore_graph : bool, optional
+            If True, restore the graph structure, by default False
+        restore_properties : bool, optional
+            If True, restore the properties of the meshwork, by default True
+        synapse_reference_tables : dict, optional
+            Additional synapse reference tables to use, by default None
+        skeleton_version : int, optional
+            Version of the skeleton to use, by default None
+        transform : Literal["rigid", "streamline"], optional
+            Type of transformation to apply, by default None
+
+        Returns
+        -------
+        Meshwork
+            The meshwork for the specified root ID.
+        """
         if skeleton_version is None:
             skeleton_version = 4
         nrn = pcg_skel.get_meshwork_from_client(
