@@ -4,13 +4,13 @@ title: API Reference
 
 ## Dataset Clients
 
-CortexClient provides preconfigured clients for specific datasets. Each dataset client inherits all functionality from the base `DatasetClient` class but is preconfigured with dataset-specific parameters.
+Cortical Tools provides preconfigured clients for specific datasets. Each dataset client inherits all functionality from the base `DatasetClient` class but is preconfigured with dataset-specific parameters.
 
 ### Microns Dataset
 
 #### MinniePublicClient
 
-::: cortexclient.datasets.microns_public.MinniePublicClient
+::: cortical_tools.datasets.microns_public.MinniePublicClient
     options:
         show_source: false
         heading_level: 4
@@ -19,7 +19,7 @@ CortexClient provides preconfigured clients for specific datasets. Each dataset 
 
 #### MicronsProdClient
 
-::: cortexclient.datasets.microns_prod.MicronsProdClient
+::: cortical_tools.datasets.microns_prod.MicronsProdClient
     options:
         show_source: false
         heading_level: 4
@@ -30,7 +30,7 @@ CortexClient provides preconfigured clients for specific datasets. Each dataset 
 
 #### V1ddPublicClient
 
-::: cortexclient.datasets.v1dd_public.V1ddPublicClient
+::: cortical_tools.datasets.v1dd_public.V1ddPublicClient
     options:
         show_source: false
         heading_level: 4
@@ -39,7 +39,7 @@ CortexClient provides preconfigured clients for specific datasets. Each dataset 
 
 #### V1ddClient
 
-::: cortexclient.datasets.v1dd.V1ddClient
+::: cortical_tools.datasets.v1dd.V1ddClient
     options:
         show_source: false
         heading_level: 4
@@ -52,7 +52,7 @@ CortexClient provides preconfigured clients for specific datasets. Each dataset 
 
 The base class that provides core functionality for all dataset clients.
 
-::: cortexclient.common.DatasetClient
+::: cortical_tools.common.DatasetClient
     options:
         show_source: false
         heading_level: 4
@@ -62,7 +62,7 @@ The base class that provides core functionality for all dataset clients.
 
 Provides mesh-related operations and utilities.
 
-::: cortexclient.mesh.MeshClient
+::: cortical_tools.mesh.MeshClient
     options:
         show_source: false
         heading_level: 4
@@ -74,7 +74,7 @@ Provides mesh-related operations and utilities.
 
 Main client for working with static table exports.
 
-::: cortexclient.files.TableExportClient
+::: cortical_tools.files.TableExportClient
     options:
         show_source: false
         heading_level: 4
@@ -84,7 +84,7 @@ Main client for working with static table exports.
 
 Individual export file representation.
 
-::: cortexclient.files.CloudFileViewExport
+::: cortical_tools.files.CloudFileViewExport
     options:
         show_source: false
         heading_level: 4

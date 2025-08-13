@@ -8,23 +8,8 @@ if TYPE_CHECKING:
 
 import numpy as np
 from cloudvolume import CloudVolume
-from trimesh import Trimesh
 
 from .mesh_vertex import VertexAssigner
-
-
-def _convert_to_trimesh(mesh):
-    """
-    Convert a mesh to a trimesh object.
-    """
-    if isinstance(mesh, Trimesh):
-        return mesh
-    elif hasattr(mesh, "vertices") and hasattr(mesh, "faces"):
-        return Trimesh(vertices=mesh.vertices, faces=mesh.faces)
-    else:
-        raise ValueError(
-            "Invalid mesh format. Must be a Trimesh object or have vertices and faces attributes."
-        )
 
 
 class MeshClient:
@@ -64,41 +49,36 @@ class MeshClient:
         root_id: int,
         *,
         progress: bool = False,
-        as_trimesh: bool = False,
+        # ...existing code...
         **kwargs,
     ):
         """Get single mesh from root id
 
-        Parameters
-        ----------
-        root_id : int
-            Root ID for a neuron
-        progress : bool, optional
-            If True, use progress bar, by default True
-        as_trimesh : bool, optional
-            If True, converts to a trimesh Trimesh object, by default False
-        kwargs: dict, optional
-            Additional keyword arguments to pass to cloudvolume.mesh.get.
+            Parameters
+            ----------
+            root_id : int
+                Root ID for a neuron
+            progress : bool, optional
+                If True, use progress bar, by default True
+        # ...existing code...
+            kwargs: dict, optional
+                Additional keyword arguments to pass to cloudvolume.mesh.get.
 
-        Returns
-        -------
-        Mesh
+            Returns
+            -------
             Mesh
+                Mesh
         """
         if not isinstance(root_id, Integral):
             raise ValueError("This function takes only one root id")
         mesh = self._get_meshes(root_id, progress, **kwargs).get(root_id)
-        if as_trimesh:
-            return _convert_to_trimesh(mesh)
-        else:
-            return mesh
+        return mesh
 
     def get_meshes(
         self,
         root_ids: list,
         *,
         progress: bool = True,
-        as_trimesh: bool = False,
         **kwargs,
     ):
         """Get multiple meshes from root ids.
@@ -109,16 +89,17 @@ class MeshClient:
             List of root ids
         progress : bool, optional
             If True, use progress bar, by default True
-        as_trimesh : bool, optional
-            If True, converts each mesh to a trimesh Trimesh object, by default False
+
+        kwargs: dict, optional
+            Additional keyword arguments to pass to cloudvolume.mesh.get.
+
+        Returns
+        -------
+        dict
+            Dictionary of meshes keyed by root id.
         """
         meshes = self._get_meshes(root_ids, progress, **kwargs)
-        if as_trimesh:
-            return {
-                root_id: _convert_to_trimesh(meshes[root_id]) for root_id in root_ids
-            }
-        else:
-            return meshes
+        return meshes
 
     def compute_vertex_to_l2_mapping(
         self,
@@ -200,4 +181,5 @@ class MeshClient:
 
     @property
     def mesh_l2_mappings(self) -> dict:
+        """Get the dictionary of root id to mesh vertex to layer 2 id mappings."""
         return self._mesh_labels

@@ -6,13 +6,13 @@ Here are a few examples of using dataset-specific clients for work.
 
 ## Install and import
 
-Importing `client` from any of the dataset-specific modules in `cortexclient.datasets` will return a fully initialized `CortexClient` object configured for that dataset.
+Importing `client` from any of the dataset-specific modules in `cortical_tools.datasets` will return a fully initialized dataset client object configured for that dataset.
 The current datasets are `minnie_public`, `minnie_prod`, `v1dd`, and `v1dd_public`.
 If you have not yet configured your environment to access these datasets, you will need to do so before using the client.
 Please see your dataset documentation to do this.
 
 ```python
-from cortexclient.datasets.minnie_public import client
+from cortical_tools.datasets.minnie_public import client
 
 client
 ```
@@ -115,7 +115,7 @@ See the [MeshClient](reference/api.md#meshclient) documentation for all availabl
 ## Get a skeleton
 
 The new skeleton service helps return skeletons, and `pcg_skel` has additional functions to add synapses and vertex ids that help you map additional properties.
-This functionality is baked into the `cortexclient` like so:
+This functionality is baked into the `cortical_tools` like so:
 
 ```python
 root_id = int(root_ids.iloc[0])
