@@ -115,7 +115,7 @@ See the [MeshClient](reference/api.md#meshclient) documentation for all availabl
 ## Get a skeleton
 
 The new skeleton service helps return skeletons, and `pcg_skel` has additional functions to add synapses and vertex ids that help you map additional properties.
-This functionality is baked into the `cortical_tools` like so:
+This functionality is baked into `cortical_tools` like so:
 
 ```python
 root_id = int(root_ids.iloc[0])
