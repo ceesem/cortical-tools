@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "cortical-tools"
-version = "0.0.1"
+version = "0.0.2"
 description = "Client for cortical CAVE datasets"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -54,7 +54,7 @@ profile = [
 default-groups = ["dev", "docs", "lint", "profile"]
 
 [tool.bumpversion]
-current_version = "0.0.1"
+current_version = "0.0.2"
 parse = "(?P<major>\\d+)\\.(?P<minor>\\d+)\\.(?P<patch>\\d+)"
 serialize = ["{major}.{minor}.{patch}"]
 regex = false
