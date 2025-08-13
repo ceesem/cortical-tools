@@ -1,4 +1,5 @@
 import datetime
+import logging
 from copy import copy
 from itertools import combinations
 from typing import TYPE_CHECKING, Optional, Self
@@ -12,7 +13,10 @@ from joblib import Parallel, delayed
 from scipy import sparse, spatial
 from scipy.optimize import linear_sum_assignment
 from scipy.spatial.distance import cdist
-from tqdm import tqdm
+from tqdm_joblib import ParallelPbar
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 from .utils import suppress_output
 
@@ -102,56 +106,56 @@ def chunk_to_nm(xyz_ch, cv):
 
 def component_submesh(
     within_component_mask,
-    mask_in,
-    mask_all,
     vertices,
     faces,
 ):
     """Create a submesh for the specific component of the mesh"""
-    component_mask = mask_in.copy()
-    component_mask[mask_in] = within_component_mask
-
-    # I want faces that have all values in the boundary inclusive mask and any values in the component mask.
-
-    face_touch_component = np.any(component_mask[faces], axis=1)
-
+    face_touch_component = np.any(within_component_mask[faces], axis=1)
     component_faces = faces[face_touch_component]
-    component_vertex_indices = np.unique(component_faces.ravel())
-    vertex_mask = np.zeros(vertices.shape[0], dtype=bool)
-    vertex_mask[component_vertex_indices] = True
-    relabel = {v: k for k, v in enumerate(np.flatnonzero(vertex_mask))}
-    component_faces = fastremap.remap(component_faces, relabel)
-    return vertices[component_vertex_indices], component_faces, component_mask
+    if len(component_faces) == 0:
+        return np.empty((0, 3), dtype=int), np.empty((0, 3), dtype=int)
+    newV, newF = gyp.remove_unreferenced(vertices, component_faces)
+    return newV, newF
 
 
-def create_component_dict(chunk_rows, vertices, faces):
+def create_component_dict(chunk_rows, vertices, faces) -> list:
+    # Reduce to an edge-inclusive collection of vertices and faces.
     mask_all = bbox_mask(chunk_rows.iloc[0], vertices, inclusive=True)
-    mask_in = bbox_mask(chunk_rows.iloc[0], vertices, inclusive=False)
-    if not np.any(mask_in):
-        return [], np.full(mask_all.shape, False, dtype=bool)
-
-    minds = np.flatnonzero(mask_in)
-    relabel = {v: k for k, v in enumerate(minds)}
-
-    face_mask = mask_in[faces]
-    faces_relabel = fastremap.remap(
-        faces[np.all(face_mask, axis=1)],
+    vertices_chunk = vertices[mask_all]
+    faces_filter = faces[np.all(mask_all[faces], axis=1)]
+    relabel = {v: k for k, v in enumerate(np.flatnonzero(mask_all))}
+    faces_chunk = fastremap.remap(
+        faces_filter,
         relabel,
     )
 
-    # Make sure isolated vertices are included in the components
-    face_identity = np.array([[ii, ii, ii] for ii in range(len(minds))])
+    # Now go to the subset of vertices and faces purely within the chunk
+    mask_in = bbox_mask(chunk_rows.iloc[0], vertices_chunk, inclusive=False)
+    if not np.any(mask_in):
+        return []
+    if np.all(mask_in):
+        faces_not_touching_edge = faces_chunk
+    else:
+        faces_not_touching_edge = faces_chunk[np.all(mask_in[faces_chunk], axis=1)]
+
+    # Make sure isolated vertices are included in the components, but only if interior
+    face_identity = np.array([[ii, ii, ii] for ii in range(mask_in.shape[0])])
     vertex_cc = gyp.connected_components(
-        np.vstack([np.atleast_2d(faces_relabel).reshape(-1, 3), face_identity])
+        np.vstack(
+            [np.atleast_2d(faces_not_touching_edge).reshape(-1, 3), face_identity]
+        )
     )
+    vertex_cc[~mask_in] = -1
 
     # Now for each component, find the faces associated with its true vertices plus any faces that are only on the boundary of the chunk
     components = []
-    assigned_vertices = np.full(mask_in.shape[0], False, dtype=bool)
+    assigned_vertices = np.full(mask_all.shape[0], False, dtype=bool)
     comp_id = 0
-    for ii in np.unique(vertex_cc):
-        comp_verts, comp_faces, comp_mask = component_submesh(
-            vertex_cc == ii, mask_in, mask_all, vertices, faces
+    for ii in np.unique(vertex_cc[mask_in]):
+        comp_mask = np.full(mask_all.shape, False, dtype=bool)
+        comp_mask[mask_all] = vertex_cc == ii
+        comp_verts, comp_faces = component_submesh(
+            vertex_cc == ii, vertices_chunk, faces_chunk
         )
         assigned_vertices[comp_mask] = True
         if comp_faces.shape[0] == 0:
@@ -166,8 +170,7 @@ def create_component_dict(chunk_rows, vertices, faces):
             }
         )
         comp_id += 1
-    unassigned_mask = np.logical_and(mask_in, np.logical_not(assigned_vertices))
-    return components, unassigned_mask
+    return components
 
 
 class VertexAssigner:
@@ -204,6 +207,7 @@ class VertexAssigner:
     def _setup_root_id(self) -> Self:
         """Set the root ID for the mesh"""
         if self._vertices is None or self._faces is None:
+            logger.info("Fetching mesh data for root ID: %d", self._root_id)
             self._vertices, self._faces = self.get_mesh_data(self._root_id)
         self._timestamp = self.root_id_timestamp(self._root_id)
         self._chunk_df_solo, self._chunk_df_multi = self.get_chunk_dataframes(
@@ -265,8 +269,8 @@ class VertexAssigner:
         return self.chunk_df["l2id"].values
 
     @property
-    def mesh_label(self) -> npt.NDArray:
-        """Get the mesh label for the vertices"""
+    def mesh_label_index(self) -> npt.NDArray:
+        """Get the mesh label index into the lvl2 ids for the vertices"""
         if self._mesh_label is None:
             raise ValueError(
                 "Mesh label must be computed with 'get_mesh_label' before accessing it."
@@ -385,7 +389,7 @@ class VertexAssigner:
         chunk_rows,
         vertices,
         faces,
-        ts,
+        ts: Optional[bool] = None,
         cloudvolume_fallback: bool = False,
         max_distance: float = 500,
         ratio_better: float = 0.33,
@@ -402,7 +406,7 @@ class VertexAssigner:
             Dictionary mapping component IDs to masks for the vertices in the global mesh.
         """
         pts = np.array(chunk_rows[["pt_x", "pt_y", "pt_z"]].values, dtype=float)
-        components, unassigned_mask = create_component_dict(chunk_rows, vertices, faces)
+        components = create_component_dict(chunk_rows, vertices, faces)
         if len(components) == 0:
             return (
                 pd.DataFrame(
@@ -412,7 +416,6 @@ class VertexAssigner:
                     }
                 ),
                 {},
-                unassigned_mask,
             )
         wn_results = []
         for comp in components:
@@ -468,7 +471,7 @@ class VertexAssigner:
             if comp["component_id"] in result_df["graph_comp"].values:
                 comp_mask_dict[comp["component_id"]] = comp["mask"]
 
-        return result_df, comp_mask_dict, unassigned_mask
+        return result_df, comp_mask_dict
 
     def representative_point_via_proximity(
         self,
@@ -605,8 +608,8 @@ class VertexAssigner:
     ):
         comp_bbox = np.vstack(
             [
-                np.min(comp["vertices"], axis=0) - 2 * self.draco_size,
-                2 * self.draco_size + np.max(comp["vertices"], axis=0),
+                np.min(comp["vertices"], axis=0) - 5 * self.draco_size,
+                5 * self.draco_size + np.max(comp["vertices"], axis=0),
             ]
         )
         not_enough_points = True
@@ -696,17 +699,15 @@ class VertexAssigner:
         """
 
         # To get the right mesh faces for association, we need to include the vertices on chunk bounds even if we don't plan to assign values to them
-        assignment_df, component_mask_dict, unassigned_mask = (
-            self.assign_points_to_components(
-                chunk_rows,
-                vertices,
-                faces,
-                ts,
-                cloudvolume_fallback=cloudvolume_fallback,
-                max_distance=max_distance,
-                ratio_better=ratio_better,
-                coarse=coarse,
-            )
+        assignment_df, component_mask_dict = self.assign_points_to_components(
+            chunk_rows,
+            vertices,
+            faces,
+            ts,
+            cloudvolume_fallback=cloudvolume_fallback,
+            max_distance=max_distance,
+            ratio_better=ratio_better,
+            coarse=coarse,
         )
         if assignment_df is None:
             return []
@@ -719,13 +720,6 @@ class VertexAssigner:
                     "vertex_mask": np.flatnonzero(
                         component_mask_dict[row["graph_comp"]]
                     ),
-                }
-            )
-        if np.any(unassigned_mask):
-            id_mapping.append(
-                {
-                    "l2id_idx": -1,
-                    "vertex_mask": np.flatnonzero(unassigned_mask),
                 }
             )
         return id_mapping
@@ -833,7 +827,6 @@ class VertexAssigner:
         ratio_better: float = 0.33,
         coarse: bool = False,
         n_jobs: int = -1,
-        verbocity: int = 1,
     ) -> list:
         if self._root_id is None:
             raise ValueError(
@@ -844,8 +837,9 @@ class VertexAssigner:
         ]
 
         # Parallelize over chunks (process-based)
-        id_mapping_results = Parallel(
-            n_jobs=n_jobs, prefer="processes", verbose=verbocity
+        id_mapping_results = ParallelPbar(desc="Processing complex chunks...")(
+            n_jobs=n_jobs,
+            prefer="processes",
         )(
             delayed(self.process_multicomponent_chunk)(
                 chunk_rows,
@@ -857,9 +851,7 @@ class VertexAssigner:
                 ratio_better=ratio_better,
                 coarse=coarse,
             )
-            for chunk_rows in tqdm(
-                chunk_groups, desc="Processing chunks", disable=n_jobs == 1
-            )
+            for chunk_rows in chunk_groups
         )
 
         # Flatten to a single list[dict]
@@ -877,9 +869,9 @@ class VertexAssigner:
             self.faces,
         )
 
-        labeled_inds = np.flatnonzero(self.mesh_label != -1)
+        labeled_inds = np.flatnonzero(self.mesh_label_index != -1)
 
-        d_to, p1, p2 = sparse.csgraph.dijkstra(
+        d_to, _, p2 = sparse.csgraph.dijkstra(
             A,
             indices=labeled_inds,
             limit=hop_limit,
@@ -888,11 +880,11 @@ class VertexAssigner:
             unweighted=True,
         )
 
-        unlabeled_inds = np.flatnonzero((self.mesh_label == -1) & ~np.isinf(d_to))
+        unlabeled_inds = np.flatnonzero((self.mesh_label_index == -1) & ~np.isinf(d_to))
         self._mesh_label[unlabeled_inds] = self._mesh_label[p2[unlabeled_inds]]
         return self.mesh_label
 
-    def get_mesh_labels(
+    def compute_mesh_labels(
         self,
         max_distance: float = 500,
         ratio_better: float = 0.33,
@@ -900,7 +892,6 @@ class VertexAssigner:
         hop_limit: Optional[int] = None,
         coarse: bool = False,
         n_jobs: int = -1,
-        verbocity: int = 10,
     ) -> np.ndarray:
         """
         Process the mesh.
@@ -916,14 +907,15 @@ class VertexAssigner:
             else:
                 hop_limit = 50
 
+        logger.info("Processing simple chunks...")
         id_mapping_solo = self.process_chunk_dataframe_solo()
+        logger.info("Processing complex chunks...")
         id_mapping_multi = self.process_chunk_dataframe_multi(
             cloudvolume_fallback=cloudvolume_fallback,
             max_distance=max_distance,
             ratio_better=ratio_better,
             coarse=coarse,
             n_jobs=n_jobs,
-            verbocity=verbocity,
         )
 
         mesh_label = np.full(self.vertices.shape[0], -1, dtype=int)
@@ -934,11 +926,15 @@ class VertexAssigner:
         self._mesh_label = mesh_label
         if hop_limit > 0:
             self.propagate_labels(hop_limit=hop_limit)
-        return self.lvl2_map()
+        return self._lvl2_map()
 
-    def lvl2_map(self) -> np.ndarray:
+    @property
+    def mesh_label(self) -> np.ndarray:
+        return self._lvl2_map()
+
+    def _lvl2_map(self) -> np.ndarray:
         lvl2_map = np.full(self.vertices.shape[0], 0, dtype=int)
-        lvl2_map[self.mesh_label != -1] = self.lvl2_ids[
-            self.mesh_label[self.mesh_label != -1]
+        lvl2_map[self.mesh_label_index != -1] = self.lvl2_ids[
+            self.mesh_label_index[self.mesh_label_index != -1]
         ]
         return lvl2_map
