@@ -884,7 +884,7 @@ class VertexAssigner:
         self._mesh_label[unlabeled_inds] = self._mesh_label[p2[unlabeled_inds]]
         return self.mesh_label
 
-    def compute_mesh_labels(
+    def compute_mesh_label(
         self,
         max_distance: float = 500,
         ratio_better: float = 0.33,
