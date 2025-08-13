@@ -49,25 +49,23 @@ class MeshClient:
         root_id: int,
         *,
         progress: bool = False,
-        # ...existing code...
         **kwargs,
     ):
         """Get single mesh from root id
 
-            Parameters
-            ----------
-            root_id : int
-                Root ID for a neuron
-            progress : bool, optional
-                If True, use progress bar, by default True
-        # ...existing code...
-            kwargs: dict, optional
-                Additional keyword arguments to pass to cloudvolume.mesh.get.
+        Parameters
+        ----------
+        root_id : int
+            Root ID for a neuron
+        progress : bool, optional
+            If True, use progress bar, by default True
+        kwargs: dict, optional
+            Additional keyword arguments to pass to cloudvolume.mesh.get.
 
-            Returns
-            -------
+        Returns
+        -------
+        Mesh
             Mesh
-                Mesh
         """
         if not isinstance(root_id, Integral):
             raise ValueError("This function takes only one root id")
