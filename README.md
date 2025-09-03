@@ -25,7 +25,6 @@ Cortical Tools is opinionated, and installs not only CAVEclient, but a number of
 
 ```python
 from cortical_tools.datasets.minnie_public import client
-client = MinniePublicClient()
 client
 ```
 
