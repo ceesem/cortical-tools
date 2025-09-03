@@ -4,7 +4,7 @@ Cortical Tools offers dataset-specific Python clients for interacting with sever
 It wraps CAVEclient and related tooling with a more task-focused design than the infrastructure-focused CAVEclient.
 The public entry point is a preconfigured client for datasets.
 
-- Get started with the [Examples](http://www.csdashm.com/cortical_tools/examples/)
+- Get started with the [Examples](http://www.csdashm.com/cortical-tools/examples/)
 
 ## Who can use it?
 
