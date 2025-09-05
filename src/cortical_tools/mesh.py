@@ -6,10 +6,16 @@ import numpy.typing as npt
 if TYPE_CHECKING:
     from caveclient import CAVEclientFull
 
+import logging
+
 import numpy as np
+import urllib3
 from cloudvolume import CloudVolume
 
 from .mesh_vertex import VertexAssigner
+
+urllib3.disable_warnings()
+logging.getLogger("urllib3").setLevel(logging.CRITICAL)
 
 
 class MeshClient:
