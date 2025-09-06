@@ -1,9 +1,13 @@
 import datetime
+import gc
 import logging
+import os
 import warnings
 from copy import copy
 from itertools import combinations
 from typing import TYPE_CHECKING, Optional, Self
+
+import psutil
 
 warnings.filterwarnings(
     "ignore", message=".*Using `tqdm.autonotebook.tqdm` in notebook mode.*"
@@ -19,7 +23,7 @@ from joblib import Parallel, delayed
 from scipy import sparse, spatial
 from scipy.optimize import linear_sum_assignment
 from scipy.spatial.distance import cdist
-from tqdm_joblib import ParallelPbar
+from tqdm import tqdm
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -32,6 +36,15 @@ if TYPE_CHECKING:
     from .common import CAVEclientFull
 
 __all__ = ["VertexAssigner"]
+
+
+def log_memory_usage(stage_name: str, logger=logger, level=logging.DEBUG):
+    """Log current memory usage for debugging"""
+    process = psutil.Process(os.getpid())
+    memory_info = process.memory_info()
+    memory_mb = memory_info.rss / 1024 / 1024
+    logger.log(level, f"Memory usage at {stage_name}: {memory_mb:.1f} MB")
+    return memory_mb
 
 
 def get_lvl2_points(
@@ -90,6 +103,158 @@ def bbox_mask(
         )
 
 
+def spatial_bbox_query(
+    row,
+    vertices,
+    spatial_index,
+    inclusive=True,
+):
+    """Efficient spatial query for vertices within a bounding box using KDTree
+
+    Parameters
+    ----------
+    row : pd.Series
+        A row from chunk_df_solo containing bounding box coordinates
+    vertices : npt.NDArray
+        Array of vertex positions (used for compatibility)
+    spatial_index : scipy.spatial.cKDTree
+        Pre-built spatial index of the vertices
+    inclusive : bool
+        Whether to include boundary vertices
+
+    Returns
+    -------
+    npt.NDArray
+        Boolean mask indicating which vertices are within the bounding box
+    """
+    # Extract bounding box coordinates
+    min_bounds = np.array(
+        [row["bbox_start_x"], row["bbox_start_y"], row["bbox_start_z"]]
+    )
+    max_bounds = np.array([row["bbox_end_x"], row["bbox_end_y"], row["bbox_end_z"]])
+
+    # Use rectangular query approach optimized for chunk structure
+    # Since chunks are roughly cubic, use the diagonal distance as a conservative bound
+    center = (min_bounds + max_bounds) / 2
+    chunk_dimensions = max_bounds - min_bounds
+
+    # Use half the diagonal of the bounding box as radius for L2 norm query
+    # This ensures we capture all vertices in the rectangular region
+    diagonal_radius = np.linalg.norm(chunk_dimensions) / 2
+
+    # Get candidate vertices within the bounding sphere (L2 norm is faster than L-inf for KDTree)
+    candidate_indices = spatial_index.query_ball_point(center, diagonal_radius, p=2)
+
+    # Create boolean mask
+    mask = np.zeros(len(vertices), dtype=bool)
+
+    if len(candidate_indices) > 0:
+        # Filter candidates to exact bounding box
+        candidate_vertices = vertices[candidate_indices]
+
+        if inclusive:
+            exact_mask = (
+                (candidate_vertices[:, 0] >= min_bounds[0])
+                & (candidate_vertices[:, 0] <= max_bounds[0])
+                & (candidate_vertices[:, 1] >= min_bounds[1])
+                & (candidate_vertices[:, 1] <= max_bounds[1])
+                & (candidate_vertices[:, 2] >= min_bounds[2])
+                & (candidate_vertices[:, 2] <= max_bounds[2])
+            )
+        else:
+            exact_mask = (
+                (candidate_vertices[:, 0] >= min_bounds[0])
+                & (candidate_vertices[:, 0] < max_bounds[0])
+                & (candidate_vertices[:, 1] >= min_bounds[1])
+                & (candidate_vertices[:, 1] < max_bounds[1])
+                & (candidate_vertices[:, 2] >= min_bounds[2])
+                & (candidate_vertices[:, 2] < max_bounds[2])
+            )
+
+        # Set mask for valid candidates
+        valid_candidates = np.array(candidate_indices)[exact_mask]
+        mask[valid_candidates] = True
+
+    return mask
+
+
+def vectorized_bbox_batch_query(
+    chunk_rows,
+    vertices,
+    inclusive=True,
+):
+    """Vectorized batch processing of bounding box queries for multiple chunks
+
+    This replaces individual spatial queries with a single vectorized operation,
+    dramatically reducing function call overhead and improving cache locality.
+
+    Parameters
+    ----------
+    chunk_rows : list of tuples
+        List of (index, row) pairs from chunk dataframe
+    vertices : npt.NDArray
+        Array of vertex positions
+    inclusive : bool
+        Whether to include boundary vertices
+
+    Returns
+    -------
+    list of npt.NDArray
+        List of boolean masks, one for each chunk
+    """
+    if len(chunk_rows) == 0:
+        return []
+
+    n_chunks = len(chunk_rows)
+    n_vertices = len(vertices)
+
+    # Pre-allocate arrays for better memory efficiency
+    min_bounds = np.empty((n_chunks, 3), dtype=vertices.dtype)
+    max_bounds = np.empty((n_chunks, 3), dtype=vertices.dtype)
+
+    # Extract bounding box data directly into pre-allocated arrays
+    for i, (idx, row) in enumerate(chunk_rows):
+        min_bounds[i, 0] = row["bbox_start_x"]
+        min_bounds[i, 1] = row["bbox_start_y"]
+        min_bounds[i, 2] = row["bbox_start_z"]
+        max_bounds[i, 0] = row["bbox_end_x"]
+        max_bounds[i, 1] = row["bbox_end_y"]
+        max_bounds[i, 2] = row["bbox_end_z"]
+
+    # Pre-allocate result list for better performance
+    result_masks = [None] * n_chunks
+
+    # Vectorized processing - optimized for memory access patterns
+    for chunk_idx in range(n_chunks):
+        # Direct array access is faster than slicing
+        min_x, min_y, min_z = min_bounds[chunk_idx]
+        max_x, max_y, max_z = max_bounds[chunk_idx]
+
+        # Optimized vectorized comparison with short-circuit evaluation
+        if inclusive:
+            mask = (
+                (vertices[:, 0] >= min_x)
+                & (vertices[:, 0] <= max_x)
+                & (vertices[:, 1] >= min_y)
+                & (vertices[:, 1] <= max_y)
+                & (vertices[:, 2] >= min_z)
+                & (vertices[:, 2] <= max_z)
+            )
+        else:
+            mask = (
+                (vertices[:, 0] >= min_x)
+                & (vertices[:, 0] < max_x)
+                & (vertices[:, 1] >= min_y)
+                & (vertices[:, 1] < max_y)
+                & (vertices[:, 2] >= min_z)
+                & (vertices[:, 2] < max_z)
+            )
+
+        result_masks[chunk_idx] = mask
+
+    return result_masks
+
+
 def chunk_to_nm(xyz_ch, cv):
     """Map a chunk location to Euclidean space
 
@@ -127,8 +292,19 @@ def component_submesh(
 
 
 def create_component_dict(chunk_rows, vertices, faces) -> list:
-    # Reduce to an edge-inclusive collection of vertices and faces.
-    mask_all = bbox_mask(chunk_rows.iloc[0], vertices, inclusive=True)
+    # Reduce to an edge-inclusive collection of vertices and faces using vectorized approach
+    first_row = chunk_rows.iloc[0]
+
+    # Use vectorized bbox query instead of old bbox_mask
+    mask_all = (
+        (vertices[:, 0] >= first_row["bbox_start_x"])
+        & (vertices[:, 0] <= first_row["bbox_end_x"])
+        & (vertices[:, 1] >= first_row["bbox_start_y"])
+        & (vertices[:, 1] <= first_row["bbox_end_y"])
+        & (vertices[:, 2] >= first_row["bbox_start_z"])
+        & (vertices[:, 2] <= first_row["bbox_end_z"])
+    )
+
     vertices_chunk = vertices[mask_all]
     faces_filter = faces[np.all(mask_all[faces], axis=1)]
     relabel = {v: k for k, v in enumerate(np.flatnonzero(mask_all))}
@@ -137,8 +313,15 @@ def create_component_dict(chunk_rows, vertices, faces) -> list:
         relabel,
     )
 
-    # Now go to the subset of vertices and faces purely within the chunk
-    mask_in = bbox_mask(chunk_rows.iloc[0], vertices_chunk, inclusive=False)
+    # Now go to the subset of vertices and faces purely within the chunk (non-inclusive)
+    mask_in = (
+        (vertices_chunk[:, 0] >= first_row["bbox_start_x"])
+        & (vertices_chunk[:, 0] < first_row["bbox_end_x"])
+        & (vertices_chunk[:, 1] >= first_row["bbox_start_y"])
+        & (vertices_chunk[:, 1] < first_row["bbox_end_y"])
+        & (vertices_chunk[:, 2] >= first_row["bbox_start_z"])
+        & (vertices_chunk[:, 2] < first_row["bbox_end_z"])
+    )
     if not np.any(mask_in):
         return []
     if np.all(mask_in):
@@ -214,13 +397,30 @@ class VertexAssigner:
 
     def _setup_root_id(self) -> Self:
         """Set the root ID for the mesh"""
+        log_memory_usage("start of _setup_root_id")
+
         if self._vertices is None or self._faces is None:
             logger.info("Fetching mesh data for root ID: %d", self._root_id)
             self._vertices, self._faces = self.get_mesh_data(self._root_id)
+            log_memory_usage("after loading mesh data")
+            logger.info(
+                f"Loaded mesh with {len(self._vertices)} vertices and {len(self._faces)} faces"
+            )
+
         self._timestamp = self.root_id_timestamp(self._root_id)
+        log_memory_usage("after getting timestamp")
+
         self._chunk_df_solo, self._chunk_df_multi = self.get_chunk_dataframes(
             self._root_id, self._lvl2_ids, self._lvl2_pts
         )
+        log_memory_usage("after getting chunk dataframes")
+        logger.info(
+            f"Created {len(self._chunk_df_solo)} solo chunks and {len(self._chunk_df_multi)} multi-component chunks"
+        )
+
+        # Vectorized batch processing doesn't need spatial index
+        logger.info("Using vectorized batch processing (no spatial index needed)")
+
         return self
 
     @property
@@ -433,7 +633,7 @@ class VertexAssigner:
         wn_results = np.array(wn_results).T
 
         pt_assign, mesh_assign = linear_sum_assignment(
-            np.array(wn_results) / np.max(wn_results), maximize=True
+            np.array(wn_results) / (np.max(wn_results) + 1), maximize=True
         )
 
         # If there are more components than points, don't assign components to the lower-scoring ones
@@ -790,24 +990,82 @@ class VertexAssigner:
 
     def process_chunk_dataframe_solo(
         self,
+        batch_size: int = 5000,
     ) -> list:
         if self._root_id is None:
             raise ValueError(
                 "Root ID must be set before processing multi-component chunks."
             )
 
-        id_mapping = []
-        vertex_lists = Parallel(n_jobs=-1)(
-            delayed(bbox_mask)(row, self._vertices)
-            for _, row in self._chunk_df_solo.iterrows()
+        log_memory_usage("start of process_chunk_dataframe_solo", level=logging.DEBUG)
+        logger.info(
+            f"Processing {len(self._chunk_df_solo)} solo chunks with vectorized batch queries"
         )
-        for idx, vert_mask in zip(self._chunk_df_solo.index, vertex_lists):
-            id_mapping.append(
-                {
-                    "l2id_idx": int(idx),
-                    "vertex_mask": np.flatnonzero(vert_mask),
-                }
+
+        # Track overall performance
+        import time
+
+        overall_start = time.time()
+
+        # Process in batches to limit memory usage
+        id_mapping = []
+        chunk_rows = list(self._chunk_df_solo.iterrows())
+        total_batches = (len(chunk_rows) + batch_size - 1) // batch_size
+
+        for batch_idx in range(total_batches):
+            start_idx = batch_idx * batch_size
+            end_idx = min(start_idx + batch_size, len(chunk_rows))
+            batch_rows = chunk_rows[start_idx:end_idx]
+
+            logger.debug(
+                f"Processing batch {batch_idx + 1}/{total_batches} ({len(batch_rows)} chunks)"
             )
+
+            # Time the vectorized batch query performance
+            import time
+
+            batch_start = time.time()
+
+            # Use vectorized batch processing - eliminates multiprocessing overhead
+            vertex_lists = vectorized_bbox_batch_query(batch_rows, self._vertices)
+
+            batch_time = time.time() - batch_start
+            chunks_per_sec = len(batch_rows) / batch_time if batch_time > 0 else 0
+            logger.debug(
+                f"Batch {batch_idx + 1} completed in {batch_time:.3f} seconds ({chunks_per_sec:.0f} chunks/sec)"
+            )
+
+            # Process results for this batch
+            total_vertices_found = 0
+            for (idx, row), vert_mask in zip(batch_rows, vertex_lists):
+                vertex_indices = np.flatnonzero(vert_mask)
+                total_vertices_found += len(vertex_indices)
+                id_mapping.append(
+                    {
+                        "l2id_idx": int(idx),
+                        "vertex_mask": vertex_indices,
+                    }
+                )
+
+            logger.debug(
+                f"Batch {batch_idx + 1} found {total_vertices_found} vertices in {len(batch_rows)} chunks ({total_vertices_found / len(batch_rows):.1f} vertices/chunk avg)"
+            )
+
+            # Free memory from this batch
+            del vertex_lists
+            gc.collect()
+
+        # Log overall performance summary
+        overall_time = time.time() - overall_start
+        total_chunks = len(chunk_rows)
+        overall_rate = total_chunks / overall_time if overall_time > 0 else 0
+        logger.info(f"Solo chunk processing complete: {total_chunks} chunks processed")
+        logger.debug(
+            f"Solo chunk timing: {overall_time:.3f}s ({overall_rate:.0f} chunks/sec overall)"
+        )
+
+        log_memory_usage("after all bbox_mask computation", level=logging.DEBUG)
+        log_memory_usage("end of process_chunk_dataframe_solo")
         return id_mapping
 
     def root_id_timestamp(
@@ -835,50 +1093,140 @@ class VertexAssigner:
         ratio_better: float = 0.33,
         coarse: bool = False,
         n_jobs: int = -1,
+        batch_size: int = 20,
     ) -> list:
         if self._root_id is None:
             raise ValueError(
                 "Root ID must be set before processing multi-component chunks."
             )
+
+        log_memory_usage("start of processing multi-component chunks")
         chunk_groups = [
             chunk_rows for _, chunk_rows in self._chunk_df_multi.groupby("chunk_number")
         ]
+        logger.info(f"Processing {len(chunk_groups)} multi-component chunks")
 
-        # Parallelize over chunks (process-based)
-        id_mapping_results = ParallelPbar(desc="Processing complex chunks...")(
-            n_jobs=n_jobs,
-            prefer="processes",
-        )(
-            delayed(self.process_multicomponent_chunk)(
-                chunk_rows,
-                self._vertices,
-                self._faces,
-                self._timestamp,
-                cloudvolume_fallback=cloudvolume_fallback,
-                max_distance=max_distance,
-                ratio_better=ratio_better,
-                coarse=coarse,
-            )
-            for chunk_rows in chunk_groups
+        # Process chunk groups in batches to reduce joblib overhead
+        total_batches = (len(chunk_groups) + batch_size - 1) // batch_size
+        logger.debug(
+            f"Using batched processing: {total_batches} batches of {batch_size} chunk groups each"
         )
+
+        log_memory_usage("before parallel multicomponent processing")
+
+        # Parallelize over chunk batches with conservative job count to avoid disk space issues
+        multi_n_jobs = min(4, max(1, n_jobs)) if n_jobs != -1 else 4
+        logger.debug(f"Processing with {multi_n_jobs} processes")
+
+        all_results = []
+        with tqdm(
+            total=total_batches, desc="Processing multi-component chunks", unit="batch"
+        ) as super_pbar:
+            for batch_idx in range(total_batches):
+                start_idx = batch_idx * batch_size
+                end_idx = min(start_idx + batch_size, len(chunk_groups))
+                batch_chunk_groups = chunk_groups[start_idx:end_idx]
+
+                logger.debug(
+                    f"Processing batch {batch_idx + 1}/{total_batches} ({len(batch_chunk_groups)} chunk groups)"
+                )
+
+                # Time each batch
+                import time
+
+                batch_start = time.time()
+
+                # Process this batch of chunk groups in parallel
+                batch_results = Parallel(
+                    n_jobs=multi_n_jobs,
+                    prefer="processes",
+                )(
+                    delayed(self.process_multicomponent_chunk)(
+                        chunk_rows,
+                        self._vertices,
+                        self._faces,
+                        self._timestamp,
+                        cloudvolume_fallback=cloudvolume_fallback,
+                        max_distance=max_distance,
+                        ratio_better=ratio_better,
+                        coarse=coarse,
+                    )
+                    for chunk_rows in batch_chunk_groups
+                )
+
+                batch_time = time.time() - batch_start
+                chunks_per_sec = (
+                    len(batch_chunk_groups) / batch_time if batch_time > 0 else 0
+                )
+                logger.debug(
+                    f"Batch {batch_idx + 1} completed in {batch_time:.2f}s ({chunks_per_sec:.1f} chunk groups/sec)"
+                )
+
+                all_results.extend(batch_results)
+
+                # Clean up batch memory
+                del batch_results
+                gc.collect()
+
+                # Update super progress bar
+                super_pbar.update(1)
+
+        id_mapping_results = all_results
+
+        log_memory_usage("after parallel multicomponent processing")
 
         # Flatten to a single list[dict]
         id_mapping: list = []
         for result in id_mapping_results:
             if isinstance(result, list) and len(result) > 0:
                 id_mapping.extend(result)
+
+        # Free the parallel processing results
+        del id_mapping_results
+        gc.collect()
+
+        log_memory_usage("end of process_chunk_dataframe_multi")
         return id_mapping
 
     def propagate_labels(
         self,
         hop_limit: int = 50,
+        batch_size: int = 500000,
     ):
-        A = gyp.adjacency_matrix(
-            self.faces,
+        """Propagate labels using batched processing to avoid huge adjacency matrices"""
+        log_memory_usage("start of batched label propagation")
+
+        labeled_inds = np.flatnonzero(self.mesh_label_index != -1)
+        unlabeled_inds = np.flatnonzero(self.mesh_label_index == -1)
+
+        logger.info(f"Number of labeled vertices: {len(labeled_inds)}")
+        logger.info(f"Number of unlabeled vertices: {len(unlabeled_inds)}")
+
+        if len(unlabeled_inds) == 0:
+            logger.info("All vertices already labeled, skipping propagation")
+            return self.mesh_label
+
+        # For small meshes, use the original method
+        if len(self.vertices) < batch_size:
+            logger.debug("Using original propagation method for small mesh")
+            return self._propagate_labels_original(hop_limit)
+
+        # For large meshes, use spatial batching
+        logger.debug(f"Using batched propagation with batch size {batch_size}")
+        return self._propagate_labels_batched(
+            hop_limit, batch_size, labeled_inds, unlabeled_inds
         )
+
+    def _propagate_labels_original(self, hop_limit: int = 50):
+        """Original label propagation method for smaller meshes"""
+        log_memory_usage("before adjacency matrix creation")
+        A = gyp.adjacency_matrix(self.faces)
+        log_memory_usage("after adjacency matrix creation")
+        logger.debug(f"Adjacency matrix shape: {A.shape}, nnz: {A.nnz}")
 
         labeled_inds = np.flatnonzero(self.mesh_label_index != -1)
 
+        log_memory_usage("before dijkstra computation")
         d_to, _, p2 = sparse.csgraph.dijkstra(
             A,
             indices=labeled_inds,
@@ -887,9 +1235,143 @@ class VertexAssigner:
             return_predecessors=True,
             unweighted=True,
         )
+        log_memory_usage("after dijkstra computation")
+
+        # Free the adjacency matrix as soon as we're done with it
+        del A
+        gc.collect()
+        log_memory_usage("after freeing adjacency matrix")
 
         unlabeled_inds = np.flatnonzero((self.mesh_label_index == -1) & ~np.isinf(d_to))
+        logger.debug(
+            f"Number of vertices to propagate labels to: {len(unlabeled_inds)}"
+        )
         self._mesh_label[unlabeled_inds] = self._mesh_label[p2[unlabeled_inds]]
+
+        # Free dijkstra results
+        del d_to, p2
+        gc.collect()
+
+        log_memory_usage("after original label propagation")
+        return self.mesh_label
+
+    def _propagate_labels_batched(
+        self,
+        hop_limit: int,
+        batch_size: int,
+        labeled_inds: np.ndarray,
+        unlabeled_inds: np.ndarray,
+    ):
+        """Batched label propagation using spatial chunking"""
+        log_memory_usage("start of batched label propagation")
+
+        # Create spatial batches based on vertex positions
+        num_batches = max(1, len(self.vertices) // batch_size)
+        logger.debug(f"Processing label propagation in {num_batches} spatial batches")
+
+        # Sort vertices by z-coordinate for spatial locality
+        vertex_order = np.argsort(self.vertices[:, 2])
+        vertices_per_batch = len(vertex_order) // num_batches
+
+        processed_vertices = set()
+
+        for batch_idx in range(num_batches):
+            start_idx = batch_idx * vertices_per_batch
+            if batch_idx == num_batches - 1:  # Last batch gets remainder
+                end_idx = len(vertex_order)
+            else:
+                end_idx = (batch_idx + 1) * vertices_per_batch
+
+            batch_vertices = vertex_order[start_idx:end_idx]
+            logger.debug(
+                f"Processing batch {batch_idx + 1}/{num_batches} ({len(batch_vertices)} vertices)"
+            )
+
+            # Find faces that involve vertices in this batch
+            faces_in_batch = np.any(np.isin(self.faces, batch_vertices), axis=1)
+            batch_faces = self.faces[faces_in_batch]
+
+            # Get all vertices involved in these faces (including neighbors)
+            extended_vertices = np.unique(batch_faces)
+
+            # Skip if all vertices in this batch are already processed
+            batch_unlabeled = extended_vertices[
+                np.isin(extended_vertices, unlabeled_inds)
+            ]
+            batch_unlabeled = batch_unlabeled[
+                ~np.isin(batch_unlabeled, list(processed_vertices))
+            ]
+
+            if len(batch_unlabeled) == 0:
+                logger.debug(
+                    f"Batch {batch_idx + 1} has no unlabeled vertices, skipping"
+                )
+                continue
+
+            # Create vertex mapping for this batch
+            vertex_map = {v: i for i, v in enumerate(extended_vertices)}
+            remapped_faces = np.array(
+                [[vertex_map[v] for v in face] for face in batch_faces]
+            )
+
+            # Create adjacency matrix for this batch only
+            log_memory_usage(f"before batch {batch_idx + 1} adjacency matrix")
+            A_batch = gyp.adjacency_matrix(remapped_faces)
+            log_memory_usage(f"after batch {batch_idx + 1} adjacency matrix")
+
+            # Find labeled vertices in this batch
+            batch_labeled = extended_vertices[np.isin(extended_vertices, labeled_inds)]
+            batch_labeled_indices = [vertex_map[v] for v in batch_labeled]
+
+            if len(batch_labeled_indices) == 0:
+                logger.debug(
+                    f"Batch {batch_idx + 1} has no labeled seed vertices, skipping"
+                )
+                del A_batch
+                continue
+
+            # Run dijkstra on this batch
+            d_to, _, p2 = sparse.csgraph.dijkstra(
+                A_batch,
+                indices=batch_labeled_indices,
+                limit=hop_limit,
+                min_only=True,
+                return_predecessors=True,
+                unweighted=True,
+            )
+
+            # Map results back to original vertex indices
+            batch_unlabeled_indices = [
+                vertex_map[v] for v in batch_unlabeled if v in vertex_map
+            ]
+            reachable_mask = ~np.isinf(d_to[batch_unlabeled_indices])
+
+            if np.any(reachable_mask):
+                reachable_unlabeled_indices = np.array(batch_unlabeled_indices)[
+                    reachable_mask
+                ]
+                predecessor_indices = p2[reachable_unlabeled_indices]
+
+                # Update labels
+                for local_unlabeled_idx, local_pred_idx in zip(
+                    reachable_unlabeled_indices, predecessor_indices
+                ):
+                    global_unlabeled_idx = extended_vertices[local_unlabeled_idx]
+                    global_pred_idx = extended_vertices[local_pred_idx]
+                    self._mesh_label[global_unlabeled_idx] = self._mesh_label[
+                        global_pred_idx
+                    ]
+                    processed_vertices.add(global_unlabeled_idx)
+
+            # Clean up batch memory
+            del A_batch, d_to, p2
+            gc.collect()
+            log_memory_usage(f"after batch {batch_idx + 1} cleanup")
+
+        logger.info(
+            f"Processed {len(processed_vertices)} vertices through batched propagation"
+        )
+        log_memory_usage("end of batched label propagation")
         return self.mesh_label
 
     def compute_mesh_label(
@@ -900,6 +1382,8 @@ class VertexAssigner:
         hop_limit: Optional[int] = None,
         coarse: bool = False,
         n_jobs: int = -1,
+        solo_batch_size: int = 5000,
+        propagation_batch_size: Optional[int] = None,
     ) -> np.ndarray:
         """
         Process the mesh.
@@ -909,6 +1393,8 @@ class VertexAssigner:
         np.ndarray
             Array of l2ids for each mesh label. Unassigned values have id 0.
         """
+        log_memory_usage("start of compute_mesh_label")
+
         if hop_limit is None:
             if coarse:
                 hop_limit = 75
@@ -916,8 +1402,22 @@ class VertexAssigner:
                 hop_limit = 50
 
         logger.info("Processing simple chunks...")
-        id_mapping_solo = self.process_chunk_dataframe_solo()
+        log_memory_usage("before processing simple chunks")
+        # With vectorized batch processing, we can handle large batches efficiently
+        if len(self._chunk_df_solo) > 10000:
+            logger.debug(
+                f"Large mesh detected ({len(self._chunk_df_solo)} solo chunks), using vectorized batch processing"
+            )
+            # Vectorized processing can handle very large batches efficiently
+            solo_batch_size = min(
+                solo_batch_size, 8000
+            )  # Very large batches are fine with vectorized approach
+
+        id_mapping_solo = self.process_chunk_dataframe_solo(batch_size=solo_batch_size)
+        log_memory_usage("after processing simple chunks")
+
         logger.info("Processing complex chunks...")
+        log_memory_usage("before processing complex chunks")
         id_mapping_multi = self.process_chunk_dataframe_multi(
             cloudvolume_fallback=cloudvolume_fallback,
             max_distance=max_distance,
@@ -925,6 +1425,7 @@ class VertexAssigner:
             coarse=coarse,
             n_jobs=n_jobs,
         )
+        log_memory_usage("after processing complex chunks")
 
         mesh_label = np.full(self.vertices.shape[0], -1, dtype=int)
         for row in id_mapping_solo:
@@ -932,8 +1433,30 @@ class VertexAssigner:
         for row in id_mapping_multi:
             mesh_label[row["vertex_mask"]] = row["l2id_idx"]
         self._mesh_label = mesh_label
+
+        # Free intermediate mapping results
+        del id_mapping_solo, id_mapping_multi
+        gc.collect()
+        log_memory_usage("after freeing intermediate mapping results")
+
+        labeled_count = np.sum(mesh_label != -1)
+        logger.info(
+            f"Labeled {labeled_count}/{len(mesh_label)} vertices before propagation"
+        )
+
         if hop_limit > 0:
-            self.propagate_labels(hop_limit=hop_limit)
+            log_memory_usage("before label propagation")
+            # Use much larger batch sizes since memory usage is conservative
+            if propagation_batch_size is None:
+                # For large meshes, use bigger batches since we have plenty of memory
+                batch_size = min(1000000, max(200000, len(self.vertices) // 5))
+            else:
+                batch_size = propagation_batch_size
+            logger.debug(f"Using propagation batch size: {batch_size}")
+            self.propagate_labels(hop_limit=hop_limit, batch_size=batch_size)
+            log_memory_usage("after label propagation")
+
+        log_memory_usage("end of compute_mesh_label")
         return self._lvl2_map()
 
     @property
