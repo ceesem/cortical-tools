@@ -1,5 +1,5 @@
 import datetime
-from typing import TYPE_CHECKING, Literal, Optional
+from typing import TYPE_CHECKING, Literal, Optional, Union
 
 if TYPE_CHECKING:
     from meshparty.meshwork import Meshwork
@@ -9,12 +9,14 @@ import numpy.typing as npt
 import pandas as pd
 import pcg_skel
 import standard_transform
+import tqdm as tqdm
 from caveclient import CAVEclient
 from caveclient.frameworkclient import CAVEclientFull
 from nglui import statebuilder as sb
 
 from .files import TableExportClient
 from .mesh import MeshClient
+from .utils import suppress_output
 
 
 def null_function_factory(arguments_to_set=[]):
@@ -113,17 +115,21 @@ def _selective_lookup(
     main_table: str,
     alt_tables: list,
 ):
-    lookup_df_main = client.materialize.tables[main_table](
-        pt_root_id=query_idx.values
-    ).live_query(timestamp=timestamp, split_positions=True)
+    with suppress_output():
+        lookup_df_main = client.materialize.tables[main_table](
+            pt_root_id=query_idx.values
+        ).live_query(timestamp=timestamp, split_positions=True, log_warning=False)
     lookup_df_main = lookup_df_main[["id", "pt_root_id"]].set_index("pt_root_id")
 
     if len(lookup_df_main) < len(query_idx):
         lookup_df_alts = []
         for alt_table in alt_tables:
-            lookup_df_alt = client.materialize.tables[alt_table](
-                pt_ref_root_id=query_idx.values,
-            ).live_query(timestamp=timestamp, split_positions=True)
+            with suppress_output():
+                lookup_df_alt = client.materialize.tables[alt_table](
+                    pt_ref_root_id=query_idx.values,
+                ).live_query(
+                    timestamp=timestamp, split_positions=True, log_warning=False
+                )
             if len(lookup_df_alt) > 0:
                 lookup_df_alts.append(lookup_df_alt[["id", "pt_root_id"]])
         if len(lookup_df_alts) > 0:
@@ -336,6 +342,179 @@ class DatasetClient:
         Set the materialization version of the CAVEclient.
         """
         self.cave.materialize.version = value
+
+    def query_synapses(
+        self,
+        root_ids: Union[int, list],
+        pre: bool = False,
+        post: bool = False,
+        reference_tables: Optional[list] = None,
+        synapse_table: Optional[str] = None,
+        omit_self_synapse: bool = True,
+        resolution=[1, 1, 1],
+        split_positions: bool = True,
+        live: bool = False,
+        timestamp: Optional[datetime.datetime] = None,
+        suffixes: Optional[dict] = None,
+        batch_size: int = 10,
+        ref_batch_size: int = 5000,
+        progress: bool = True,
+    ) -> pd.DataFrame:
+        """
+        Query synapses for one or more root ID.
+
+        Parameters
+        ----------
+        root_ids : int, list
+            Root ID or list of ids for a neuron.
+        pre : bool, optional
+            If True, include pre-synaptic synapses, by default True.
+            All synapses will be concatenated into a single dataframe, with duplicate synapse ids removed.
+        post : bool, optional
+            If True, include post-synaptic synapses, by default True.
+            All synapses will be concatenated into a single dataframe, with duplicate synapse ids removed.
+        reference_tables : list, optional
+            List of reference tables to use, by default None.
+            Reference tables will be merged on "id" column, which could result in null values.
+        synapse_table : str, optional
+            Name of the synapse table to use, by default None (uses default synapse table)
+        resolution: list, optional
+            Desired resolution for positions, by default [1, 1, 1]
+        split_positions : bool, optional
+            If True, split position columns into x, y, z, by default True.
+        live : bool, optional
+            If True, use live_query to query synapses, by default False.
+        timestamp : datetime.datetime, optional
+            Timestamp for the query, by default None (uses current time).
+            The same timestamp must be used for all root IDs.
+        omit_self_synapse : bool, optional
+            If True, omit self-synapses, by default True
+        suffixes : dict, optional
+            Suffixes to use for reference table columns, by default None.
+        batch_size : int, optional
+            Batch size for number of cells to query at once, by default 10.
+        ref_batch_size : int, optional
+            Batch size for number of synapses to query in reference tables at once, by default 5000.
+        progress : bool, optional
+            If True, show progress bar, by default True.
+
+        Returns
+        -------
+        pd.DataFrame
+            DataFrame containing the synapses for the specified root ID.
+        """
+        if reference_tables is None:
+            reference_tables = []
+        if suffixes is None:
+            suffixes = {}
+        if not pre and not post:
+            raise ValueError("At least one of pre or post must be True")
+        if synapse_table is None:
+            synapse_table = self.cave.materialize.synapse_table
+
+        syn_dfs = []
+        if timestamp is None:
+            timestamp = self.now()
+        root_ids = np.atleast_1d(root_ids)
+        if pre:
+            for root_id_batch in tqdm.tqdm(
+                np.array_split(
+                    np.atleast_1d(root_ids),
+                    np.ceil(len(root_ids) / batch_size),
+                ),
+                disable=not progress,
+                leave=False,
+                desc="Querying pre:",
+            ):
+                if live:
+                    with suppress_output():
+                        pre_df = self.tables[synapse_table](
+                            pre_pt_root_id=root_id_batch
+                        ).live_query(
+                            split_positions=split_positions,
+                            desired_resolution=resolution,
+                            timestamp=timestamp,
+                            log_warning=False,
+                        )
+                else:
+                    pre_df = self.tables[synapse_table](
+                        pre_pt_root_id=root_id_batch
+                    ).query(
+                        split_positions=split_positions,
+                        desired_resolution=resolution,
+                        materialization_version=self.version,
+                    )
+                syn_dfs.append(pre_df)
+        if post:
+            for root_id_batch in tqdm.tqdm(
+                np.array_split(
+                    np.atleast_1d(root_ids),
+                    np.ceil(len(root_ids) / batch_size),
+                ),
+                disable=not progress,
+                leave=False,
+                desc="Querying post:",
+            ):
+                if live:
+                    with suppress_output():
+                        post_df = self.tables[synapse_table](
+                            pre_pt_root_id=root_id_batch
+                        ).live_query(
+                            split_positions=split_positions,
+                            desired_resolution=resolution,
+                            timestamp=timestamp,
+                            log_warning=False,
+                        )
+                else:
+                    post_df = self.tables[synapse_table](
+                        pre_pt_root_id=root_id_batch
+                    ).query(
+                        split_positions=split_positions,
+                        desired_resolution=resolution,
+                        materialization_version=self.version,
+                    )
+                syn_dfs.append(post_df)
+        syn_df = pd.concat(syn_dfs, ignore_index=True)
+        syn_df = syn_df.drop_duplicates(subset="id", keep="first").reset_index(
+            drop=True
+        )
+        if omit_self_synapse:
+            syn_df = syn_df.query("pre_pt_root_id != post_pt_root_id").reset_index(
+                drop=True
+            )
+
+        for ref_table in reference_tables:
+            syn_ids = syn_df["id"].unique()
+            ref_dfs = []
+            for syn_id_batch in tqdm.tqdm(
+                np.array_split(syn_ids, np.ceil(len(syn_ids) / ref_batch_size)),
+                disable=not progress,
+                desc=f"Querying {ref_table}",
+                leave=False,
+            ):
+                if live:
+                    with suppress_output():
+                        ref_df = self.cave.materialize.live_live_query(
+                            ref_table,
+                            filter_in_dict={ref_table: {"id": syn_id_batch}},
+                            log_warning=False,
+                            timestamp=timestamp,
+                        )
+                else:
+                    ref_df = self.cave.materialize.query_table(
+                        ref_table,
+                        filter_in_dict={"id": syn_id_batch},
+                        merge_reference=False,
+                        log_warning=False,
+                    )
+                ref_dfs.append(ref_df)
+            syn_df = syn_df.merge(
+                pd.concat(ref_dfs, ignore_index=True),
+                on="id",
+                suffixes=("", suffixes.get(ref_table, f"_{ref_table}")),
+                how="left",
+            )
+        return syn_df
 
     def get_l2_ids(self, root_id: int) -> np.ndarray:
         """Get level 2 ids for a root id.

@@ -830,7 +830,7 @@ class VertexAssigner:
             random_points = np.random.uniform(
                 low=comp_bbox[0], high=comp_bbox[1], size=(N, 3)
             ).astype(int)
-            with suppress_output():
+            with suppress_output("urllib3"):
                 pt_lookup = np.array(
                     list(
                         self.cv.scattered_points(
@@ -947,7 +947,7 @@ class VertexAssigner:
         self,
         root_id,
     ) -> tuple[npt.NDArray, npt.NDArray]:
-        with suppress_output():
+        with suppress_output("urllib3"):
             mesh = self.cv.mesh.get(root_id, fuse=False).get(root_id)
         return mesh.vertices, mesh.faces
 

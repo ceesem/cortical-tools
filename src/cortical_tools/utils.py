@@ -3,6 +3,7 @@ import logging
 import os
 import sys
 from contextlib import contextmanager
+from typing import Optional
 
 import urllib3
 
@@ -15,13 +16,23 @@ def current_timestamp() -> datetime.datetime:
 
 
 @contextmanager
-def suppress_output():
-    """Context manager to suppress stdout and stderr output."""
+def suppress_output(package: Optional[str] = None):
+    """Context manager to suppress stdout and stderr output.
+
+    Parameters
+    ----------
+    package : Optional[str]
+        Logger name to suppress. If None, suppress root logger output which handles
+        all loggers without their own handler.
+    """
     # Save original stdout and stderr
     original_stdout = sys.stdout
     original_stderr = sys.stderr
-    urllib3.disable_warnings()
-    logging.getLogger("urllib3").setLevel(logging.CRITICAL)
+    if package == "urllib3":
+        urllib3.disable_warnings()
+    logger = logging.getLogger(package)
+    old_level = logger.level
+    logger.setLevel(logging.CRITICAL)
 
     try:
         # Redirect to devnull or StringIO
@@ -31,5 +42,6 @@ def suppress_output():
             yield
     finally:
         # Restore original stdout and stderr
+        logger.setLevel(old_level)
         sys.stdout = original_stdout
         sys.stderr = original_stderr
