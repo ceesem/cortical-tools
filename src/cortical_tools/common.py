@@ -85,7 +85,7 @@ def cell_id_to_root_id_factory(
             )
 
         cell_id_df = pd.DataFrame(
-            index=cell_ids,
+            index=np.atleast_1d(cell_ids),
         )
 
         cell_id_df = cell_id_df.merge(
@@ -516,7 +516,9 @@ class DatasetClient:
             )
         return syn_df
 
-    def get_l2_ids(self, root_id: int) -> np.ndarray:
+    def get_l2_ids(
+        self, root_id: int, bounds: Optional[np.ndarray] = None
+    ) -> np.ndarray:
         """Get level 2 ids for a root id.
 
         Parameters
@@ -529,7 +531,7 @@ class DatasetClient:
         list[int]
             List of level 2 IDs for the specified root ID.
         """
-        return self.cave.chunkedgraph.get_roots(root_id, stop_layer=2)
+        return self.cave.chunkedgraph.get_leaves(root_id, stop_layer=2, bounds=bounds)
 
     def get_skeleton(
         self,
@@ -588,13 +590,13 @@ class DatasetClient:
                     nrn, anno_dict, inplace=True
                 )
         elif transform == "streamline":
-            self.space.streamline_nm.apply_meshwork_vertices(nrn, inplace=True)
+            self.space.streamline_nm.transform_meshwork_vertices(nrn, inplace=True)
             if synapses:
                 space_cols = [
                     x for x in nrn.anno.pre_syn.df.columns if "pt_position" in x
                 ]
                 anno_dict = {"pre_syn": space_cols, "post_syn": space_cols}
-                self.space.streamline_nm.apply_meshwork_annotations(
+                self.space.streamline_nm.transform_meshwork_annotations(
                     nrn, anno_dict, inplace=True
                 )
         return nrn
@@ -622,7 +624,7 @@ class DatasetClient:
         """
         if version is None:
             version = self.cave.materialize.version
-        return self.cave.materialize.get_version_timestamp(version)
+        return self.cave.materialize.get_timestamp(version)
 
     def latest_valid_timestamp(
         self,
