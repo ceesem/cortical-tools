@@ -2,13 +2,13 @@
 
 ## 0.0.4
 
-## Added
+### Added
  
 * Added `query_synapses` method to query synapses inclusively with reference tables.
 * Added optional bounds argument to get_l2_ids to limit search area.
 * Added dataset-active tests for all datastacks.
 
-## Fixed
+### Fixed
 
 * Fixed bug in streamline transformations for skeletons and synapses.
 * Fixed bug in get_l2_ids that did not work.
