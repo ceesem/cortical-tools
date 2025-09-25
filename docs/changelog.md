@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.5
+
+### Added
+
+* Added `cortical_tools.load_client` method that takes a dataset name (currently one of "v1dd", "v1dd_public", "microns_prod", "microns_public") and returns the corresponding dataset client. This is intended for scripts and paramterized notebooks.
+
 ## 0.0.4
 
 ### Added
