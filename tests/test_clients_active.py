@@ -4,6 +4,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from cortical_tools import load_client
+
 DATASTACK_LOOKUP = {
     "v1dd_client": "v1dd",
     "v1dd_public_client": "v1dd_public",
@@ -48,6 +50,20 @@ def test_client_datastack(client_name, request):
 def test_client_basic_tables(client_name, request):
     client = request.getfixturevalue(client_name)
     assert len(client.tables) > 0
+
+
+@pytest.mark.parametrize(
+    "client_name",
+    [
+        "v1dd",
+        "v1dd_public",
+        "microns_prod",
+        "microns_public",
+    ],
+)
+def test_client_dynamic_load(client_name):
+    client = load_client(client_name)
+    assert client.datastack_name == DATASTACK_LOOKUP.get(f"{client_name}_client")
 
 
 @pytest.mark.parametrize(
