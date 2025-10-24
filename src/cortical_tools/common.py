@@ -1,5 +1,5 @@
 import datetime
-from typing import TYPE_CHECKING, Literal, Optional, Union
+from typing import TYPE_CHECKING, Literal, Optional, Tuple, Union
 
 if TYPE_CHECKING:
     from meshparty.meshwork import Meshwork
@@ -42,6 +42,7 @@ def cell_id_to_root_id_factory(
         timestamp: Optional[datetime.datetime] = None,
         materialization_version: Optional[int] = None,
         filter_empty: bool = True,
+        omit_multiple: bool = False,
     ) -> npt.NDArray:
         """
         Convert cell IDs to root IDs using the CAVEclient.
@@ -56,6 +57,8 @@ def cell_id_to_root_id_factory(
             Timestamp for the query, by default current time.
         materialization_version : int, optional
             Materialization version, by default None.
+        omit_multiple : bool, optional
+            If True, omit cell ids that map to multiple root ids, by default False.
 
         Returns
         -------
@@ -68,42 +71,48 @@ def cell_id_to_root_id_factory(
                 datastack_name=default_datastack_name,
                 server_address=default_server_address,
             )
-        view_name = lookup_view_name
-        nuc_df = (
-            client.materialize.views[view_name](
-                id=cell_ids,
-            )
-            .query(
-                split_positions=True, materialization_version=materialization_version
-            )
-            .set_index("id")
-        )
-
-        if timestamp is not None:
-            nuc_df["pt_root_id"] = client.chunkedgraph.get_roots(
-                nuc_df["pt_supervoxel_id"], timestamp=timestamp
+        if lookup_view_name is not None:
+            view_name = lookup_view_name
+            nuc_df = (
+                client.materialize.views[view_name](
+                    id=cell_ids,
+                )
+                .query(
+                    split_positions=True,
+                    materialization_version=materialization_version,
+                )
+                .set_index("id")
             )
 
-        cell_id_df = pd.DataFrame(
-            index=np.atleast_1d(cell_ids),
-        )
+            if timestamp is not None:
+                nuc_df["pt_root_id"] = client.chunkedgraph.get_roots(
+                    nuc_df["pt_supervoxel_id"], timestamp=timestamp
+                )
 
-        cell_id_df = cell_id_df.merge(
-            nuc_df[["pt_root_id"]],
-            left_index=True,
-            right_index=True,
-            how="inner",
-        ).sort_index()
-        add_back_index = np.setdiff1d(cell_ids, cell_id_df.index.values)
-        if len(add_back_index) > 0 and not filter_empty:
-            cell_id_df = pd.concat(
-                [
-                    cell_id_df,
-                    pd.DataFrame(index=add_back_index, data={"pt_root_id": -1}),
-                ]
+            cell_id_df = pd.DataFrame(
+                index=np.atleast_1d(cell_ids),
             )
-            cell_id_df = cell_id_df.loc[cell_ids]
-        return cell_id_df["pt_root_id"].rename("root_id")
+
+            cell_id_df = cell_id_df.merge(
+                nuc_df[["pt_root_id"]],
+                left_index=True,
+                right_index=True,
+                how="inner",
+            ).sort_index()
+            add_back_index = np.setdiff1d(cell_ids, cell_id_df.index.values)
+            if len(add_back_index) > 0 and not filter_empty:
+                cell_id_df = pd.concat(
+                    [
+                        cell_id_df,
+                        pd.DataFrame(index=add_back_index, data={"pt_root_id": -1}),
+                    ]
+                )
+                cell_id_df = cell_id_df.loc[cell_ids]
+            return cell_id_df["pt_root_id"].rename("root_id")
+        else:
+            raise NotImplementedError(
+                "Cell ID to Root ID lookup not implemented for this dataset."
+            )
 
     return cell_id_to_root_id
 
@@ -119,29 +128,29 @@ def _selective_lookup(
         lookup_df_main = client.materialize.tables[main_table](
             pt_root_id=query_idx.values
         ).live_query(timestamp=timestamp, split_positions=True, log_warning=False)
-    lookup_df_main = lookup_df_main[["id", "pt_root_id"]].set_index("pt_root_id")
-
-    if len(lookup_df_main) < len(query_idx):
-        lookup_df_alts = []
-        for alt_table in alt_tables:
-            with suppress_output():
-                lookup_df_alt = client.materialize.tables[alt_table](
-                    pt_ref_root_id=query_idx.values,
-                ).live_query(
-                    timestamp=timestamp, split_positions=True, log_warning=False
+    lookup_df_alts = []
+    for alt_table in alt_tables:
+        with suppress_output():
+            lookup_df_alt = client.materialize.tables[alt_table](
+                pt_ref_root_id=query_idx.values,
+            ).live_query(timestamp=timestamp, split_positions=True, log_warning=False)
+        if len(lookup_df_alt) > 0:
+            lookup_df_alts.append(
+                lookup_df_alt[["target_id", "pt_root_id_ref"]].rename(
+                    columns={"pt_root_id_ref": "pt_root_id", "target_id": "id"}
                 )
-            if len(lookup_df_alt) > 0:
-                lookup_df_alts.append(lookup_df_alt[["id", "pt_root_id"]])
-        if len(lookup_df_alts) > 0:
-            lookup_df_alt_concat = pd.concat(lookup_df_alts)[
-                ["id", "pt_root_id"]
-            ].set_index("pt_root_id")
-        else:
-            lookup_df_alt_concat = pd.DataFrame()
-
-        lookup_df = pd.concat([lookup_df_main, lookup_df_alt_concat])
+            )
+    if len(lookup_df_alts) > 0:
+        lookup_df_alt_concat = pd.concat(lookup_df_alts)[["id", "pt_root_id"]]
     else:
-        lookup_df = lookup_df_main
+        lookup_df_alt_concat = pd.DataFrame()
+
+    # Remove any root ids that are present multiple times, since they do not have a unique mapping
+    lookup_df = (
+        pd.concat([lookup_df_main, lookup_df_alt_concat])
+        .drop_duplicates(subset="pt_root_id", keep=False)
+        .set_index("pt_root_id")
+    )
     return lookup_df
 
 
@@ -155,9 +164,24 @@ def root_id_to_cell_id_factory(
         root_ids: list[int],
         client: Optional[CAVEclient] = None,
         filter_empty: bool = False,
-    ):
+    ) -> Union[pd.Series, npt.NDArray]:
         """
-        Lookup the cell id for a list of root ids in the microns dataset
+        Lookup the cell id for a list of root ids in the microns dataset.
+
+        Parameters
+        ----------
+        root_ids : list[int]
+            List of root ids to lookup. Can be from multiple time points.
+        client : CAVEclient, optional
+            CAVEclient instance, by default None.
+        filter_empty : bool, optional
+            If True, filter out root ids that do not have a corresponding cell id, by default False. Only used if return_mapping is True.
+
+        Returns
+        -------
+        pd.Series
+            A pd.Series with cell ids as values and root ids as index, ordered as the input root ids.
+            Root ids that do not map to a cell id will have value -1.
         """
         if client is None:
             client = CAVEclient(
@@ -230,11 +254,7 @@ class DatasetClient:
             server_address = caveclient.server_address
 
         self._client = caveclient
-        self._client.version = (
-            int(caveclient.materialize.version)
-            if materialization_version is None
-            else int(materialization_version)
-        )
+        self._sync_timestamp_to_version = False
 
         self._datastack_name = datastack_name
         self._server_address = server_address
@@ -281,7 +301,25 @@ class DatasetClient:
         else:
             self.exports = TableExportClient(static_table_cloudpath)
 
-    def set_export_cloudpath(self, cloudpath: str):
+    def fix_mat_timestamp(self, version: Optional[int] = None) -> None:
+        """Fix the timestamp to a specific materialization version, by default the current version.
+
+        Parameters
+        ----------
+        version : int, optional
+            The materialization version to fix the timestamp to, by default None (uses current version).
+        """
+        self._sync_timestamp_to_version = True
+        if version is None:
+            version = self.cave.materialize.version
+        self._client.version = version
+
+    def unfix_mat_timestamp(self) -> None:
+        """Unfix the timestamp from the materialization version."""
+        self._sync_timestamp_to_version = False
+        self._client.version = None
+
+    def set_export_cloudpath(self, cloudpath: str) -> None:
         """
         Set the cloud path for static table exports.
         """
@@ -339,9 +377,12 @@ class DatasetClient:
     @version.setter
     def version(self, value: int):
         """
-        Set the materialization version of the CAVEclient.
+        Set the materialization version of the CAVEclient
         """
-        self.cave.materialize.version = value
+        if self._sync_timestamp_to_version:
+            self._client.version = value
+        else:
+            self._client.materialize.version = value
 
     def query_synapses(
         self,
@@ -458,7 +499,7 @@ class DatasetClient:
                 if live:
                     with suppress_output():
                         post_df = self.tables[synapse_table](
-                            pre_pt_root_id=root_id_batch
+                            post_pt_root_id=root_id_batch
                         ).live_query(
                             split_positions=split_positions,
                             desired_resolution=resolution,
@@ -467,7 +508,7 @@ class DatasetClient:
                         )
                 else:
                     post_df = self.tables[synapse_table](
-                        pre_pt_root_id=root_id_batch
+                        post_pt_root_id=root_id_batch
                     ).query(
                         split_positions=split_positions,
                         desired_resolution=resolution,
