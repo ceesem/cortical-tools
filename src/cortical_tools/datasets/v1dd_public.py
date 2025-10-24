@@ -8,7 +8,7 @@ class V1ddPublicClient(DatasetClient):
     server_address = "https://global.em.brain.allentech.org"
     _cell_id_lookup_view = "nucleus_alternative_lookup"
     _root_id_lookup_main_table = "nucleus_detection_v0"
-    _root_id_lookup_alt_tables = ["nucleus_alternative_points"]
+    _root_id_lookup_alt_tables = []
 
     def __init__(self):
         super().__init__(

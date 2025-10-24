@@ -109,3 +109,9 @@ help = "Profile cpu and memory of task with scalene"
 [tool.poe.tasks.profile]
 cmd = "uv run pyinstrument -r html"
 help = "Profile cpu of task with pyinstrument"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
