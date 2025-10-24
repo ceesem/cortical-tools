@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.0.6
+
+### Fixed
+
+* Fixed a bug in `root_id_to_cell_id` that could cause incorrect results in certain conditions when using alternative lookup tables.
+* Removed a non-available alternative lookup table from the v1dd_public dataset client.
+
 ## 0.0.5
 
 ### Added
