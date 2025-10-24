@@ -1099,7 +1099,7 @@ wheels = [
 
 [[package]]
 name = "cortical-tools"
-version = "0.0.5"
+version = "0.0.6"
 source = { editable = "." }
 dependencies = [
     { name = "caveclient" },
@@ -3770,9 +3770,19 @@ dependencies = [
     { name = "networkx", version = "3.4.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "networkx", version = "3.5", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "numpy" },
+    { name = "pybind11" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/8b/2e/e98aff6a5980244e18b53e0c1a9275b551fcb5593ade6de5752d14cbc147/osteoid-0.4.0.tar.gz", hash = "sha256:47a7356c6dd0e95e11a582a7e50551c4d24acf185118543e0dd2f74430f74cc7", size = 22859, upload-time = "2025-08-22T01:49:30.483Z" }
 wheels = [
+    { url = "https://files.pythonhosted.org/packages/bd/3f/a09643186b84ff19b50e87ddba5a4f27205407f12ce84e427b3e0c45c35a/osteoid-0.4.0-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:1c4479cf5aa10b27c2725098013c545942ce6b064e06999461c177d5ac0ede71", size = 95792, upload-time = "2025-10-03T21:19:17.983Z" },
+    { url = "https://files.pythonhosted.org/packages/7a/a0/1e1d25685372e6f6721739139f9d34275d0a0bc4a96466b045f04272f95f/osteoid-0.4.0-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:4c99aa3ed174521c1d9f69679209ead62a0f749988b83587db55dc3d041a3b3b", size = 93526, upload-time = "2025-10-03T21:19:19.156Z" },
+    { url = "https://files.pythonhosted.org/packages/c4/bc/38717820a3eb05b3c9e5b047cff96568f00f09dfa5e6028673de895151a4/osteoid-0.4.0-cp310-cp310-manylinux_2_24_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:8011c6b5f203ebf1589622ea5d8b2ad441af173ce2992bce867c9d6df362f855", size = 103821, upload-time = "2025-10-03T21:19:20.327Z" },
+    { url = "https://files.pythonhosted.org/packages/18/3d/be77ef0f5410650d6292438769abc10cd596ef83a1052b97e90fbee076d4/osteoid-0.4.0-cp310-cp310-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:8eb46ed52b27f0fc203082ffdc02aec24c1a8a6aa5f89803d309aa191112dfbd", size = 109368, upload-time = "2025-10-03T21:19:21.486Z" },
+    { url = "https://files.pythonhosted.org/packages/cb/6d/93aef87fba0eb73aed2aa68554d212ba8cf1ce9bc2c3d5af4bba76f60ff3/osteoid-0.4.0-cp310-cp310-win32.whl", hash = "sha256:e652ed56ccc06150e56bfaa816d2c834aea9b37c6d23c946a0d5b7913b982cfb", size = 88484, upload-time = "2025-10-03T21:19:23.427Z" },
+    { url = "https://files.pythonhosted.org/packages/f3/f4/1d58eea200b152a0d309e16dc20c890f55b44fccb77dd39c0448345c35e9/osteoid-0.4.0-cp310-cp310-win_amd64.whl", hash = "sha256:b41ace0cdace735648ebc68a19283fd28210aa3badc30161507f1e1d7e81f486", size = 94876, upload-time = "2025-10-03T21:19:22.251Z" },
+    { url = "https://files.pythonhosted.org/packages/97/5e/c5018e35e244b4c6ee7371ba74db4c1c0ee588dc8ffc195422821a4d059e/osteoid-0.4.0-cp311-cp311-macosx_10_9_x86_64.whl", hash = "sha256:c031cfaa12a477f5a04d8fdfed411705c2b8ae231eb0548fdffd0d46471b8ecb", size = 97244, upload-time = "2025-10-03T21:19:24.328Z" },
+    { url = "https://files.pythonhosted.org/packages/32/9a/5b6be73b646816902eb489b0b09a75df6a8ef2552c4d83292170304f9138/osteoid-0.4.0-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:07f4134e1dc28a6be152bdaec05e12e0c485f93952a9d15ac462dd58247dd373", size = 94674, upload-time = "2025-10-03T21:19:25.502Z" },
+    { url = "https://files.pythonhosted.org/packages/c2/ac/e468a01dfe8070346ecc8dff80391a6c392c1267b7d447b2842adc4ad6b7/osteoid-0.4.0-cp311-cp311-manylinux_2_24_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:b9ec040e4ef811c27f6661d311fb17a6fc5e9e7ef5ade79ede7760fc5e6661a1", size = 105468, upload-time = "2025-10-03T21:19:26.372Z" },
     { url = "https://files.pythonhosted.org/packages/c8/52/01157438d577802d903bc1250459de2aeac0b5d6c1bb1f1db6c4e4a186b9/osteoid-0.4.0-py3-none-any.whl", hash = "sha256:0ecf9a5503eacdb07a86c3390897c9b4e9b532e5cc26c26fc56700159e9dc27d", size = 23297, upload-time = "2025-08-22T01:49:29.683Z" },
 ]
 
@@ -4377,6 +4387,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/e9/e6/78ebbb10a8c8e4b61a59249394a4a594c1a7af95593dc933a349c8d00964/pyasn1_modules-0.4.2.tar.gz", hash = "sha256:677091de870a80aae844b1ca6134f54652fa2c8c5a52aa396440ac3106e941e6", size = 307892, upload-time = "2025-03-28T02:41:22.17Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/47/8d/d529b5d697919ba8c11ad626e835d4039be708a35b0d22de83a269a6682c/pyasn1_modules-0.4.2-py3-none-any.whl", hash = "sha256:29253a9207ce32b64c3ac6600edc75368f98473906e8fd1043bd6b5b1de2c14a", size = 181259, upload-time = "2025-03-28T02:41:19.028Z" },
+]
+
+[[package]]
+name = "pybind11"
+version = "3.0.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/2f/7b/a6d8dcb83c457e24a9df1e4d8fd5fb8034d4bbc62f3c324681e8a9ba57c2/pybind11-3.0.1.tar.gz", hash = "sha256:9c0f40056a016da59bab516efb523089139fcc6f2ba7e4930854c61efb932051", size = 546914, upload-time = "2025-08-22T20:09:27.265Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/cd/8a/37362fc2b949d5f733a8b0f2ff51ba423914cabefe69f1d1b6aab710f5fe/pybind11-3.0.1-py3-none-any.whl", hash = "sha256:aa8f0aa6e0a94d3b64adfc38f560f33f15e589be2175e103c0a33c6bce55ee89", size = 293611, upload-time = "2025-08-22T20:09:25.235Z" },
 ]
 
 [[package]]
