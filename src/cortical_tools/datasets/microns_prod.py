@@ -21,11 +21,11 @@ class MicronsProdClient(DatasetClient):
         )
 
     def __repr__(self):
-        return f"MicronsPublicClient(datastack_name={self.datastack_name}, version={self.cave.materialize.version})"
+        return f"MicronsProdClient(datastack_name={self.datastack_name}, version={self.cave.materialize.version})"
 
     def _repr_mimebundle_(self, include=None, exclude=None):
         """Necessary for IPython to detect _repr_html_ for subclasses."""
-        return {"text/html": self.__repr_html__()}, {}
+        return {"text/html": self.__repr_html__()}
 
 
 client = MicronsProdClient()

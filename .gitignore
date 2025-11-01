@@ -113,3 +113,4 @@ var/
 *.sublime-workspace
 
 scratch.ipynb
+profile.json

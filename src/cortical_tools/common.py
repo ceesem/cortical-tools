@@ -693,6 +693,7 @@ class DatasetClient:
         target_url: Optional[str] = None,
         clipboard=False,
         shorten=False,
+        root_ids: Optional[list[int]] = None,
     ) -> str:
         """
         Get the Neuroglancer URL for the current datastack and version.
@@ -701,6 +702,12 @@ class DatasetClient:
         ----------
         target_url : str, optional
             The base URL for Neuroglancer, by default None (uses default server address).
+        root_ids: list[int], optional
+            List of root IDs to include in the Neuroglancer URL, by default None (includes none).
+        clipboard : bool, optional
+            If True, copy the URL to the clipboard instead of returning it, by default False.
+        shorten : bool, optional
+            If True, shorten the URL using a URL shortener service, by default False.
 
         Returns
         -------
@@ -708,6 +715,9 @@ class DatasetClient:
             The Neuroglancer URL.
         """
         vs = sb.ViewerState(client=self.cave).add_layers_from_client()
+        if root_ids is not None:
+            vs.add_segments(segments=root_ids)
+
         if clipboard:
             return vs.to_clipboard(
                 target_url=target_url,
@@ -724,7 +734,7 @@ class DatasetClient:
 
     def _repr_mimebundle_(self, include=None, exclude=None):
         """Necessary for IPython to detect _repr_html_ for subclasses."""
-        return {"text/html": self.__repr_html__()}, {}
+        return {"text/html": self.__repr_html__()}
 
     def __repr_html__(self) -> str:
         neuroglancer_url = self.neuroglancer_url()
