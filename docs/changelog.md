@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.0.7
+
+### Added
+
+* Added `root_ids` argument to `neuroglancer_url` method to allow specifying root IDs to include in the Neuroglancer view.
+
+### Fixed
+
+* Fixed __repr__ methods for MicronsProdClient to return strings correctly.
+* Updated `nglui` dependency version to fix string issues.
+
 ## 0.0.6
 
 ### Fixed
