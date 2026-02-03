@@ -5,7 +5,8 @@ import os
 import warnings
 from copy import copy
 from itertools import combinations
-from typing import TYPE_CHECKING, Optional, Self
+from typing import TYPE_CHECKING, Optional
+from typing_extensions import Self
 
 import psutil
 
