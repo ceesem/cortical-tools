@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.1.1
+
+### Fixed
+
+* Fixed docs GitHub Action to pin `mkdocs<2.0` and update `mkdocstrings-python` 2.x configuration (`import` → `inventories`, removed deprecated `allow_section_blank_line` option).
+* Fixed Python 3.10 compatibility: `Self` from `typing` is only available in 3.11+, now imported from `typing_extensions` on 3.10.
+
+## 0.1.0
+
+### Added
+
+* Lifted a series of commonly-used caveclient methods directly onto the dataset client, making them accessible without going through `client.cave`. This includes methods for chunkedgraph operations (`get_roots`, `is_latest_roots`, `get_latest_roots`, `suggest_latest_roots`), skeleton retrieval (`get_skeleton`, `skeletons_exist`), L2 cache (`get_l2_ids`, `get_l2data`), info service (`get_datastack_info`, `image_source`, `segmentation_source`, `viewer_resolution`, `image_cloudvolume`, `segmentation_cloudvolume`), JSON state (`get_state_json`, `upload_state_json`), annotation staging (`stage_annotations`, `upload_staged_annotations`), and materialization utilities (`most_recent_materialization_version`, `version_timestamp`, `latest_valid_timestamp`).
+
 ## 0.0.7
 
 ### Added
