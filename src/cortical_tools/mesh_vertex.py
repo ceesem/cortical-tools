@@ -2,10 +2,16 @@ import datetime
 import gc
 import logging
 import os
+import sys
 import warnings
 from copy import copy
 from itertools import combinations
-from typing import TYPE_CHECKING, Optional, Self
+from typing import TYPE_CHECKING, Optional
+
+if sys.version_info >= (3, 11):
+    from typing import Self
+else:
+    from typing_extensions import Self
 
 import psutil
 
