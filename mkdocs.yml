@@ -85,11 +85,11 @@ plugins:
       handlers:
         python:
           paths: [src]
+          inventories:
+            - https://docs.python.org/3/objects.inv
+            - https://numpy.org/doc/stable/objects.inv
+            - https://pandas.pydata.org/pandas-docs/stable/objects.inv
           options:
-            inventories:
-              - https://docs.python.org/3/objects.inv
-              - https://numpy.org/doc/stable/objects.inv
-              - https://pandas.pydata.org/pandas-docs/stable/objects.inv
             show_source: false
             docstring_style: numpy
             docstring_section_style: list # list, table, spacy
