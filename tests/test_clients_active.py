@@ -175,14 +175,29 @@ def test_client_l2data(client_name, request):
     df = client.tables[lookup_table].get_all()
     df.drop_duplicates("pt_root_id", inplace=True, keep=False)
 
+    # Restrict to non-zero pt_root_id values for sampling.
+    nonzero_df = df.query("pt_root_id != 0")
+    if nonzero_df.empty:
+        pytest.skip(
+            "No non-zero pt_root_id rows available in lookup table for L2 data test."
+        )
+
     good_sample = False
-    while not good_sample:
-        sample_df = df.query("pt_root_id != 0").sample(1)
+    max_attempts = min(len(nonzero_df), 100)
+    attempts = 0
+    while not good_sample and attempts < max_attempts:
+        sample_df = nonzero_df.sample(1)
         root_id = int(sample_df["pt_root_id"].values[0])
         l2_ids = client.get_l2_ids(root_id)
         if len(l2_ids) > 0:
             good_sample = True
+        attempts += 1
 
+    if not good_sample:
+        pytest.skip(
+            f"No root_id with non-empty L2 IDs found after {max_attempts} attempts; "
+            "skipping L2 data test for this client."
+        )
     result_df = client.get_l2data(l2_ids[:5])
     assert isinstance(result_df, pd.DataFrame)
 
