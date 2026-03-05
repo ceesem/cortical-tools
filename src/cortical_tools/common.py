@@ -17,7 +17,6 @@ from caveclient.chunkedgraph import ChunkedGraphClient
 from caveclient.frameworkclient import CAVEclientFull
 from caveclient.infoservice import InfoServiceClient
 from caveclient.jsonservice import JSONService
-from caveclient.l2cache import L2CacheClient
 from caveclient.materializationengine import MaterializationClient
 from caveclient.skeletonservice import SkeletonClient
 from nglui import statebuilder as sb
