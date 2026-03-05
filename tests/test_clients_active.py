@@ -153,7 +153,12 @@ def test_client_chunkedgraph_wrappers(client_name, request):
     latest_roots = client.get_latest_roots(pt_root_id)
     assert isinstance(latest_roots, np.ndarray)
     assert len(latest_roots) > 0
-    assert pt_root_id in latest_roots
+    if is_latest[0]:
+        # If the sampled pt_root_id is already the latest, it should appear in latest_roots.
+        assert pt_root_id in latest_roots
+    else:
+        # If it is not the latest, latest_roots should not include the outdated pt_root_id.
+        assert pt_root_id not in latest_roots
 
     suggested = client.suggest_latest_roots(pt_root_id)
     assert isinstance(suggested, (int, np.integer, np.ndarray))
