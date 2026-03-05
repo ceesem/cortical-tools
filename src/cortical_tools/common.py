@@ -1,4 +1,5 @@
 import datetime
+import functools
 from typing import TYPE_CHECKING, Literal, Optional, Tuple, Union
 
 if TYPE_CHECKING:
@@ -11,7 +12,13 @@ import pcg_skel
 import standard_transform
 import tqdm as tqdm
 from caveclient import CAVEclient
+from caveclient.annotationengine import AnnotationClient
+from caveclient.chunkedgraph import ChunkedGraphClient
 from caveclient.frameworkclient import CAVEclientFull
+from caveclient.infoservice import InfoServiceClient
+from caveclient.jsonservice import JSONService
+from caveclient.materializationengine import MaterializationClient
+from caveclient.skeletonservice import SkeletonClient
 from nglui import statebuilder as sb
 
 from .files import TableExportClient
@@ -728,6 +735,248 @@ class DatasetClient:
                 target_url=target_url,
                 shorten=shorten,
             )
+
+    # --- chunkedgraph ---
+
+    @functools.wraps(ChunkedGraphClient.get_roots)
+    def get_roots(
+        self,
+        supervoxel_ids: Union[list, np.ndarray],
+        timestamp: Optional[datetime.datetime] = None,
+        stop_layer: Optional[int] = None,
+    ) -> np.ndarray:
+        return self.cave.chunkedgraph.get_roots(
+            supervoxel_ids=supervoxel_ids,
+            timestamp=timestamp,
+            stop_layer=stop_layer,
+        )
+
+    @functools.wraps(ChunkedGraphClient.is_latest_roots)
+    def is_latest_roots(
+        self,
+        root_ids,
+        timestamp: Optional[datetime.datetime] = None,
+    ) -> np.ndarray:
+        return self.cave.chunkedgraph.is_latest_roots(
+            root_ids=root_ids,
+            timestamp=timestamp,
+        )
+
+    @functools.wraps(ChunkedGraphClient.get_latest_roots)
+    def get_latest_roots(
+        self,
+        root_id: int,
+        timestamp: Optional[datetime.datetime] = None,
+        timestamp_future: Optional[datetime.datetime] = None,
+    ) -> np.ndarray:
+        return self.cave.chunkedgraph.get_latest_roots(
+            root_id=root_id,
+            timestamp=timestamp,
+            timestamp_future=timestamp_future,
+        )
+
+    @functools.wraps(ChunkedGraphClient.suggest_latest_roots)
+    def suggest_latest_roots(
+        self,
+        root_id: int,
+        timestamp: Optional[datetime.datetime] = None,
+        stop_layer: Optional[int] = None,
+        return_all: bool = False,
+        return_fraction_overlap: bool = False,
+    ):
+        return self.cave.chunkedgraph.suggest_latest_roots(
+            root_id=root_id,
+            timestamp=timestamp,
+            stop_layer=stop_layer,
+            return_all=return_all,
+            return_fraction_overlap=return_fraction_overlap,
+        )
+
+    # --- materializationengine ---
+
+    @functools.wraps(MaterializationClient.most_recent_version)
+    def most_recent_materialization_version(self) -> int:
+        return self.cave.materialize.most_recent_version()
+
+    # --- annotationengine ---
+
+    @functools.wraps(AnnotationClient.stage_annotations)
+    def stage_annotations(
+        self,
+        table_name=None,
+        schema_name=None,
+        update=False,
+        id_field=False,
+        table_resolution: Optional[list] = None,
+        annotation_resolution: Optional[list] = None,
+    ):
+        return self.cave.annotation.stage_annotations(
+            table_name=table_name,
+            schema_name=schema_name,
+            update=update,
+            id_field=id_field,
+            table_resolution=table_resolution,
+            annotation_resolution=annotation_resolution,
+        )
+
+    @functools.wraps(AnnotationClient.upload_staged_annotations)
+    def upload_staged_annotations(self, staged_annos):
+        return self.cave.annotation.upload_staged_annotations(
+            staged_annos=staged_annos,
+        )
+
+    # --- l2cache ---
+
+    def get_l2data(
+        self,
+        l2_ids: Union[list, np.ndarray],
+        attributes: Optional[list] = None,
+        as_dataframe: bool = True,
+        split_columns: bool = True,
+    ) -> Union[dict, pd.DataFrame]:
+        """Get attribute statistics for L2 IDs.
+
+        Parameters
+        ----------
+        l2_ids : list or np.ndarray
+            A list of level 2 ids.
+        attributes : list, optional
+            A list of attributes to retrieve. Defaults to `None`, which will return all
+            that are available. Available stats are:
+
+            - `area_nm2`
+            - `chunk_intersect_count`
+            - `max_dt_nm`
+            - `mean_dt_nm`
+            - `pca`
+            - `pca_val`
+            - `rep_coord_nm`
+            - `size_nm3`
+
+        as_dataframe : bool, optional
+            If True (default), return a DataFrame indexed by l2_id.
+            If False, return a dict with l2 ids as keys.
+        split_columns : bool, optional
+            If True (default) and as_dataframe is True, split columns with multiple
+            values (e.g. pca, rep_coord_nm) into separate columns. Has no effect
+            when as_dataframe is False.
+
+        Returns
+        -------
+        pd.DataFrame or dict
+            Attribute statistics for the requested L2 IDs.
+        """
+        if as_dataframe:
+            return self.cave.l2cache.get_l2data_table(
+                l2_ids=l2_ids,
+                attributes=attributes,
+                split_columns=split_columns,
+            )
+        else:
+            return self.cave.l2cache.get_l2data(
+                l2_ids=l2_ids,
+                attributes=attributes,
+            )
+
+    # --- skeletonservice ---
+
+    @functools.wraps(SkeletonClient.skeletons_exist)
+    def skeletons_exist(
+        self,
+        skeleton_version: Optional[int] = 4,
+        root_ids=0,
+        log_warning: bool = True,
+        verbose_level: Optional[int] = 0,
+    ):
+        return self.cave.skeleton.skeletons_exist(
+            skeleton_version=skeleton_version,
+            root_ids=root_ids,
+            log_warning=log_warning,
+            verbose_level=verbose_level,
+        )
+
+    # --- infoservice ---
+
+    @functools.wraps(InfoServiceClient.get_datastack_info)
+    def get_datastack_info(
+        self,
+        use_stored: bool = True,
+        image_mirror: Optional[str] = None,
+    ) -> dict:
+        return self.cave.info.get_datastack_info(
+            use_stored=use_stored,
+            image_mirror=image_mirror,
+        )
+
+    @functools.wraps(InfoServiceClient.image_source)
+    def image_source(
+        self,
+        use_stored: bool = True,
+        format_for: Literal[
+            "raw", "cloudvolume", "neuroglancer", "cave_explorer", "cave-explorer"
+        ] = "raw",
+        image_mirror: Optional[str] = None,
+    ) -> str:
+        return self.cave.info.image_source(
+            use_stored=use_stored,
+            format_for=format_for,
+            image_mirror=image_mirror,
+        )
+
+    @functools.wraps(InfoServiceClient.segmentation_source)
+    def segmentation_source(
+        self,
+        use_stored: bool = True,
+        format_for: Literal[
+            "raw", "cloudvolume", "neuroglancer", "cave_explorer", "cave-explorer"
+        ] = "raw",
+    ) -> str:
+        return self.cave.info.segmentation_source(
+            use_stored=use_stored,
+            format_for=format_for,
+        )
+
+    @functools.wraps(InfoServiceClient.viewer_resolution)
+    def viewer_resolution(
+        self,
+        use_stored: bool = True,
+    ) -> np.ndarray:
+        return self.cave.info.viewer_resolution(
+            use_stored=use_stored,
+        )
+
+    @functools.wraps(InfoServiceClient.image_cloudvolume)
+    def image_cloudvolume(self, image_mirror: Optional[str] = None, **kwargs):
+        return self.cave.info.image_cloudvolume(
+            image_mirror=image_mirror,
+            **kwargs,
+        )
+
+    @functools.wraps(InfoServiceClient.segmentation_cloudvolume)
+    def segmentation_cloudvolume(self, use_client_secret: bool = True, **kwargs):
+        return self.cave.info.segmentation_cloudvolume(
+            use_client_secret=use_client_secret,
+            **kwargs,
+        )
+
+    # --- jsonservice (state) ---
+
+    @functools.wraps(JSONService.get_state_json)
+    def get_state_json(self, state_id: Union[int, str]) -> dict:
+        return self.cave.state.get_state_json(state_id=state_id)
+
+    @functools.wraps(JSONService.upload_state_json)
+    def upload_state_json(
+        self,
+        json_state: dict,
+        state_id: Optional[int] = None,
+        timestamp=None,
+    ) -> int:
+        return self.cave.state.upload_state_json(
+            json_state=json_state,
+            state_id=state_id,
+            timestamp=timestamp,
+        )
 
     def __repr__(self) -> str:
         return f"DatasetClient(datastack_name={self.datastack_name}, version={self.cave.materialize.version})"

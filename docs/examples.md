@@ -155,6 +155,91 @@ versions = client.exports.available_versions('connections_with_nuclei')
 
 See the [File Export Classes](reference/api.md#file-export-classes) documentation for more details.
 
+## Working with root IDs over time
+
+Because the segmentation is proofread, root IDs change when edits are made.
+Several methods are available directly on the client to help track root IDs across time.
+
+To check whether a root ID is still current:
+
+```python
+client.is_latest_roots([root_id])  # returns a bool array
+```
+
+To find the current root ID(s) that a now-outdated root ID has become:
+
+```python
+latest = client.get_latest_roots(root_id)
+```
+
+To go the other direction — from supervoxel IDs to root IDs — use [`get_roots()`](reference/api.md#datasetclient):
+
+```python
+root_ids = client.get_roots(supervoxel_ids)
+```
+
+If you have an outdated root ID and want a best guess at what it has become, [`suggest_latest_roots()`](reference/api.md#datasetclient) uses overlap heuristics to find the most likely successor:
+
+```python
+suggested = client.suggest_latest_roots(root_id)
+```
+
+To check which materialization version is the most recent:
+
+```python
+version = client.most_recent_materialization_version()
+```
+
+## Dataset info
+
+Basic metadata about the dataset can be retrieved directly from the client without going through `client.cave.info`:
+
+```python
+info = client.get_datastack_info()        # full info dict
+img = client.image_source()               # image layer source string
+seg = client.segmentation_source()        # segmentation layer source string
+res = client.viewer_resolution()          # numpy array of shape (3,), e.g. [8, 8, 40]
+```
+
+## Saving and retrieving neuroglancer states
+
+You can upload a JSON state to the CAVE state server and get back a state ID that can be shared or stored:
+
+```python
+state_id = client.upload_state_json(my_state_dict)
+```
+
+To retrieve a previously saved state by its ID:
+
+```python
+state = client.get_state_json(state_id)
+```
+
+## Level 2 data
+
+[`get_l2_ids()`](reference/api.md#datasetclient) returns the level 2 graph node IDs for a given root ID.
+These IDs can then be passed to [`get_l2data()`](reference/api.md#datasetclient) to retrieve per-node attribute statistics such as size, mean diameter, and representative coordinates:
+
+```python
+l2_ids = client.get_l2_ids(root_id)
+df = client.get_l2data(l2_ids)  # returns a DataFrame indexed by l2_id
+```
+
+Pass `as_dataframe=False` to get a plain dict instead:
+
+```python
+data = client.get_l2data(l2_ids, as_dataframe=False)
+```
+
+## Checking skeleton availability
+
+To check whether precomputed skeletons exist for one or more root IDs:
+
+```python
+result = client.skeletons_exist(root_ids=[root_id_1, root_id_2])
+# returns a dict mapping root_id -> bool
+```
+
 ## Helpers to assign level 2 ids to a mesh
 
 ![Mesh vertices labeled by L2 id](img/l2labeled.png){ width="600", align=right }
