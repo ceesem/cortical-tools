@@ -19,7 +19,13 @@ pip install cortical-tools
 
 (Really, you should probably be using [`uv`](https://docs.astral.sh/uv) and doing `uv add cortical-tools` to your project.)
 
-Cortical Tools is opinionated, and installs not only CAVEclient, but a number of related tools like `nglui`, `pcg_skel`, `cloudvolume`, and `standard_transform` that are commonly used in conjunction with CAVE datasets.
+Cortical Tools is opinionated, and installs not only CAVEclient, but a number of related tools like `nglui`, `ossify`, `cloudvolume`, and `standard_transform` that are commonly used in conjunction with CAVE datasets.
+
+The mesh-to-skeleton vertex lookup tooling (`VertexAssigner`) depends on `gpytoolbox`, which can be slow to build. It is an optional extra, installed with:
+
+```bash
+pip install "cortical-tools[vertex_lookup]"
+```
 
 ## Quick start
 

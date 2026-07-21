@@ -114,7 +114,7 @@ See the [MeshClient](reference/api.md#meshclient) documentation for all availabl
 
 ## Get a skeleton
 
-The new skeleton service helps return skeletons, and `pcg_skel` has additional functions to add synapses and vertex ids that help you map additional properties.
+The new skeleton service helps return skeletons, and `ossify` has additional functions to add synapses and vertex ids that help you map additional properties.
 This functionality is baked into `cortical_tools` like so:
 
 ```python
@@ -122,7 +122,7 @@ root_id = int(root_ids.iloc[0])
 nrn = client.get_skeleton(root_id, synapses=True)
 ```
 
-This returns a Meshparty "meshwork" object with `skel.skeleton` as a skeleton, as well as synapse information in `nrn.anno.pre_syn` and `nrn.anno.post_syn` respectively.
+This returns an `ossify` `Cell` object with `nrn.skeleton` as a skeleton and `nrn.mesh` as the level 2 graph, as well as synapse information in `nrn.annotations.pre_syn` and `nrn.annotations.post_syn` respectively.
 
 In addition, you can apply the same spatial transformations you do to points to the skeletons and annotations returned.
 The parameter `transform` can take one of two values: `rigid` or `streamline`. If you choose `rigid`, the skeleton and annotation points are rotated and translated so that the pial surface is at y=0 and "down" is toward white matter. If you choose `streamline`, the points are deformed along the principal curvature of neurons that project across layers. This will have the effect of making a "direct" translaminar projection such as the axon of a layer 2/3 cell or the apical dendrite of a layer 6 cell will appear more vertical.
@@ -248,7 +248,7 @@ Mesh vertices labeled by different Layer 2 Ids.
 ///
 
 It can be convenient to mask out parts of a mesh that you don't want to visualize or analyze, but most ways of assigning labels relate to skeletons.
-Skeleton vertices that are generated with `pcg_skel` have a unique "level 2 id" associated with each vertex, and nominally there is a mapping between these level 2 ids and mesh vertices.
+Skeleton vertices that are generated with `ossify` have a unique "level 2 id" associated with each vertex, and nominally there is a mapping between these level 2 ids and mesh vertices.
 In practice, however, this mapping is lost in the creation of meshes.
 
 In order to recover this mapping, you can use the [`compute_vertex_to_l2_mapping()`](reference/api.md#meshclient) function in the `MeshClient` class. This function takes the root ID of the mesh and returns an array of layer 2 IDs for each vertex.

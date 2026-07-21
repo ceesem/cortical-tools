@@ -7,18 +7,17 @@ name = "cortical-tools"
 version = "0.1.1"
 description = "Client for cortical CAVE datasets"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
-    "caveclient>=7.7.4",
-    "cloud-volume>=12.3.1",
-    "gpytoolbox>=0.3.6",
-    "nglui>=4.6.0",
+    "caveclient>=8.2.1",
+    "cloud-volume>=12.14.1",
+    "cloud-files>=6.4.0",
+    "nglui>=4.7.4",
     "numpy>=2.0.2",
     "pandas>=2.2.3",
-    "pcg-skel>=1.3.1",
-    "standard-transform>=1.4.1",
-    "tqdm-joblib>=0.0.4",
-    "typing-extensions>=4.0; python_version < '3.11'",
+    "ossify>=0.2.4",
+    "standard-transform>=2.0.0",
+    "tqdm>=4.0",
 ]
 authors = [
     { name = "Casey Schneider-Mizell", email = "caseysm@gmail.com" },
@@ -26,6 +25,13 @@ authors = [
 
 classifiers = [
     "License :: OSI Approved :: MIT License",
+]
+
+[project.optional-dependencies]
+vertex_lookup = [
+    "gpytoolbox>=0.3.6",
+    "joblib>=1.3",
+    "tqdm-joblib>=0.0.4",
 ]
 
 [dependency-groups]
@@ -36,7 +42,10 @@ dev = [
     "bump-my-version",
     "pyvista[all]",
     "seaborn",
-    "jupyter-server-proxy"
+    "jupyter-server-proxy",
+    "gpytoolbox>=0.3.6",
+    "joblib>=1.3",
+    "tqdm-joblib>=0.0.4",
  ]
 docs = [
     "mkdocs",

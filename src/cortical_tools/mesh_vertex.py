@@ -2,16 +2,10 @@ import datetime
 import gc
 import logging
 import os
-import sys
 import warnings
 from copy import copy
 from itertools import combinations
-from typing import TYPE_CHECKING, Optional
-
-if sys.version_info >= (3, 11):
-    from typing import Self
-else:
-    from typing_extensions import Self
+from typing import TYPE_CHECKING, Optional, Self
 
 import psutil
 
@@ -21,11 +15,9 @@ warnings.filterwarnings(
 
 
 import fastremap
-import gpytoolbox as gyp
 import numpy as np
 import numpy.typing as npt
 import pandas as pd
-from joblib import Parallel, delayed
 from scipy import sparse, spatial
 from scipy.optimize import linear_sum_assignment
 from scipy.spatial.distance import cdist
@@ -33,6 +25,29 @@ from tqdm import tqdm
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Optional dependencies for vertex-lookup tooling, provided by the
+# `vertex_lookup` extra (`pip install cortical-tools[vertex_lookup]`).
+try:
+    import gpytoolbox as gyp
+    from joblib import Parallel, delayed
+except ImportError:
+    gyp = None
+    Parallel = None
+    delayed = None
+
+_VERTEX_LOOKUP_MISSING_MSG = (
+    "The vertex lookup tooling requires optional dependencies (gpytoolbox, "
+    "tqdm-joblib) that are not installed. Install them with the 'vertex_lookup' "
+    "extra, e.g. `pip install cortical-tools[vertex_lookup]`."
+)
+
+
+def _require_vertex_lookup_deps():
+    """Raise an informative error if vertex-lookup dependencies are unavailable."""
+    if gyp is None or Parallel is None:
+        raise ImportError(_VERTEX_LOOKUP_MISSING_MSG)
+
 
 from .utils import suppress_output
 
@@ -381,6 +396,7 @@ class VertexAssigner:
         lvl2_pts: Optional[npt.NDArray] = None,
         lru_cache: Optional[int] = 10 * 1024,
     ):
+        _require_vertex_lookup_deps()
         self.caveclient = caveclient
         self.cv = self.caveclient.info.segmentation_cloudvolume()
         if lru_cache is not None:

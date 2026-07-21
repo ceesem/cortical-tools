@@ -3,12 +3,12 @@ import functools
 from typing import TYPE_CHECKING, Literal, Optional, Tuple, Union
 
 if TYPE_CHECKING:
-    from meshparty.meshwork import Meshwork
+    from ossify import Cell
 
 import numpy as np
 import numpy.typing as npt
+import ossify
 import pandas as pd
-import pcg_skel
 import standard_transform
 import tqdm as tqdm
 from caveclient import CAVEclient
@@ -587,25 +587,26 @@ class DatasetClient:
         synapses: bool = True,
         restore_graph: bool = False,
         restore_properties: bool = True,
-        synapse_reference_tables: Optional[dict] = None,
+        reference_tables: Optional[list[str]] = None,
         skeleton_version: Optional[int] = None,
         transform: Optional[Literal["rigid", "streamline"]] = None,
-    ) -> "Meshwork":
+    ) -> "Cell":
         """
-        Get the meshwork for a specific root ID.
+        Get the ossify Cell for a specific root ID.
 
         Parameters
         ----------
         root_id : int
             Root ID for a neuron
         synapses : bool, optional
-            If True, include synapses in the meshwork, by default True
+            If True, include synapses in the cell, by default True
         restore_graph : bool, optional
             If True, restore the graph structure, by default False
         restore_properties : bool, optional
-            If True, restore the properties of the meshwork, by default True
-        synapse_reference_tables : dict, optional
-            Additional synapse reference tables to use, by default None
+            If True, restore the graph vertex properties, by default True
+        reference_tables : list of str, optional
+            Additional synapse reference tables to merge into the synapse
+            annotations, by default None
         skeleton_version : int, optional
             Version of the skeleton to use, by default None
         transform : Literal["rigid", "streamline"], optional
@@ -613,40 +614,29 @@ class DatasetClient:
 
         Returns
         -------
-        Meshwork
-            The meshwork for the specified root ID.
+        Cell
+            The ossify Cell for the specified root ID.
         """
         if skeleton_version is None:
             skeleton_version = 4
-        nrn = pcg_skel.get_meshwork_from_client(
-            client=self.cave,
-            root_id=root_id,
+        nrn = ossify.load_cell_from_client(
+            root_id,
+            self.cave,
             synapses=synapses,
+            reference_tables=reference_tables,
             restore_graph=restore_graph,
             restore_properties=restore_properties,
-            synapse_reference_tables=synapse_reference_tables,
             skeleton_version=skeleton_version,
         )
+        # Cell.transform applies the point-callable to every spatial layer
+        # (mesh, skeleton, graph, and synapse annotations) in one pass.
         if transform == "rigid":
-            self.space.transform_nm.apply_meshwork_vertices(nrn, inplace=True)
-            if synapses:
-                space_cols = [
-                    x for x in nrn.anno.pre_syn.df.columns if "pt_position" in x
-                ]
-                anno_dict = {"pre_syn": space_cols, "post_syn": space_cols}
-                self.space.transform_nm.apply_meshwork_annotations(
-                    nrn, anno_dict, inplace=True
-                )
+            nrn = nrn.transform(self.space.transform("nm").apply)
         elif transform == "streamline":
-            self.space.streamline_nm.transform_meshwork_vertices(nrn, inplace=True)
-            if synapses:
-                space_cols = [
-                    x for x in nrn.anno.pre_syn.df.columns if "pt_position" in x
-                ]
-                anno_dict = {"pre_syn": space_cols, "post_syn": space_cols}
-                self.space.streamline_nm.transform_meshwork_annotations(
-                    nrn, anno_dict, inplace=True
-                )
+            sl_tr = self.space.streamline("nm").transformer(
+                anchor=nrn.s.root_location,
+            )
+            nrn = nrn.transform(sl_tr)
         return nrn
 
     @staticmethod
