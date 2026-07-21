@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from .common import DatasetClient
 
-__version__ = "0.1.1"
+__version__ = "1.0.0"
 
 
 def load_client(dataset_name: str) -> "DatasetClient":
